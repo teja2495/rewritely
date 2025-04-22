@@ -2,6 +2,22 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Permission to draw over other apps -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- Permission for network access -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Base Permission for foreground service -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <!-- Specific permission type required when using foregroundServiceType="specialUse" on Android 14+ -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
+
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="*/*" />
+        </intent>
+    </queries>
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -11,18 +27,45 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Rewritely"
-        tools:targetApi="31">
+        tools:targetApi="35" >
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:label="@string/app_name"
             android:theme="@style/Theme.Rewritely">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name=".RewritelyService"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:label="@string/accessibility_service_label"
+            android:description="@string/accessibility_service_description"
+            android:exported="false"
+            android:foregroundServiceType="specialUse"> <!-- Declares the foreground service type -->
+
+            <!-- Intent filter to identify this as an Accessibility Service -->
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+
+            <!-- Link to the XML configuration file for the Accessibility Service -->
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+
+            <!--
+             Required justification property when using foregroundServiceType="specialUse"
+             Targeting Android 14 (API 34) or higher. Explain why this type is needed.
+            -->
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Provides assistance features via AccessibilityService API for users with disabilities." />
+
+        </service>
     </application>
 
 </manifest>
