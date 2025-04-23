@@ -1,1 +1,63 @@
-/build
+# Built files
+/build/
+/app/build/
+/*.iml
+.gradle
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+
+# Keystore files
+*.jks
+*.keystore
+
+# Signing configs and secrets
+gradle.properties
+*.keystore
+*.key
+*.pem
+
+# Android Studio files
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Log files
+*.log
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# Kotlin build folder
+/out/
+
+# Crashlytics/Analytics
+fabric.properties
+crashlytics.properties
+
+# NDK
+.externalNativeBuild
+
+# Gradle wrapper
+gradle-wrapper.jar
+gradle-wrapper.properties
+
+# Generated files
+captures/
+output.json
+
+# Ignore apk or aab output if needed
+*.apk
+*.ap_
+*.aab
+
+# Misc
+build/
+.navigation/
+.cxx/
