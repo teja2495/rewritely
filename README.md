@@ -5,7 +5,7 @@ Rewritely is an Android application that enhances user input by providing an eas
 ## Features
 
 * **Text Rewriting:** Rewrites text in any input field using the OpenAI API.
-* **Floating Icon:** Provides a non-intrusive floating icon for easy access to the rewrite functionality.
+* **Floating Icon:** Provides a non-intrusive floating icon for easy access to the rewrite functionality. Type at least 3 words in the input field for the icon to show up.
 * **API Key Management:** Securely stores and manages the OpenAI API key.
 * **Permissions Handling:** Manages necessary permissions, including Accessibility Service and Draw Over Other Apps.
 
