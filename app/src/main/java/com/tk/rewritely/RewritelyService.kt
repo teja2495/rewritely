@@ -31,7 +31,7 @@ class RewritelyService : AccessibilityService() {
 
     // Undo/Redo state
     private var originalText: String = ""
-    private var aiReply: String = ""
+    private var newText: String = ""
     private var canUndo = false
     private var canRedo = false
 
@@ -207,10 +207,10 @@ class RewritelyService : AccessibilityService() {
                 ApiClient.instance.getCompletion("Bearer $apiKey", request)
             }.onSuccess { res ->
                 withContext(Dispatchers.Main) {
-                    val reply = res.body()?.choices?.firstOrNull()?.message?.content?.trim()
-                    if (res.isSuccessful && !reply.isNullOrBlank()) {
-                        aiReply = reply
-                        setText(node, reply)
+                    val result = res.body()?.choices?.firstOrNull()?.message?.content?.trim()
+                    if (res.isSuccessful && !result.isNullOrBlank()) {
+                        newText = result
+                        setText(node, result)
                         canUndo = true
                         canRedo = false
                     } else {
@@ -251,7 +251,7 @@ class RewritelyService : AccessibilityService() {
                     true
                 }
                 R.id.action_redo -> {
-                    setText(node, aiReply)
+                    setText(node, newText)
                     canRedo = false
                     canUndo = true
                     true
