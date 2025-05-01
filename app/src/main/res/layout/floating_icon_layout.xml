@@ -12,12 +12,12 @@
         android:src="@drawable/sparkle"
         android:elevation="8dp" />
 
-<!--    <ImageView-->
-<!--        android:id="@+id/options_icon_image"-->
-<!--        android:layout_width="25dp"-->
-<!--        android:layout_height="25dp"-->
-<!--        android:layout_marginStart="8dp"-->
-<!--        android:src="@drawable/options_icon"-->
-<!--        android:elevation="8dp" />-->
+    <ImageView
+        android:id="@+id/options_icon_image"
+        android:layout_width="25dp"
+        android:layout_height="25dp"
+        android:layout_marginStart="8dp"
+        android:src="@drawable/options_icon"
+        android:elevation="8dp" />
 
 </LinearLayout>

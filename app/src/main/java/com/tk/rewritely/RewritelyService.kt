@@ -29,11 +29,11 @@ class RewritelyService : AccessibilityService() {
     private lateinit var params: WindowManager.LayoutParams
     private var floatingIcon: View? = null
 
-    // Undo/Redo state
-    private var originalText: String = ""
-    private var newText: String = ""
-    private var canUndo = false
-    private var canRedo = false
+    // Undo/Redo state - commented out to disable functionality
+    // private var originalText: String = ""
+    // private var newText: String = ""
+    // private var canUndo = false
+    // private var canRedo = false
 
     private var currentNode: WeakReference<AccessibilityNodeInfo>? = null
     private val ignoredFields = mutableSetOf<Pair<String?, String?>>()
@@ -122,8 +122,8 @@ class RewritelyService : AccessibilityService() {
                 .apply {
                     findViewById<ImageView>(R.id.floating_icon_image)
                         .setOnTouchListener(iconTouchListener())
-//                    findViewById<ImageView>(R.id.options_icon_image)
-//                        .setOnClickListener { showOptionsMenu(it) }
+                    findViewById<ImageView>(R.id.options_icon_image)
+                        .setOnClickListener { showOptionsMenu(it) }
                     windowManager.addView(this, params.apply { x = lastX; y = lastY })
                 }
         }
@@ -197,7 +197,7 @@ class RewritelyService : AccessibilityService() {
         }
 
         // save for undo
-        originalText = original
+        // originalText = original
         Toast.makeText(this, "Sending to AI...", Toast.LENGTH_SHORT).show()
         val prompt = "$prefix $original"
 
@@ -209,10 +209,10 @@ class RewritelyService : AccessibilityService() {
                 withContext(Dispatchers.Main) {
                     val result = res.body()?.choices?.firstOrNull()?.message?.content?.trim()
                     if (res.isSuccessful && !result.isNullOrBlank()) {
-                        newText = result
+                        // newText = result
                         setText(node, result)
-                        canUndo = true
-                        canRedo = false
+                        // canUndo = true
+                        // canRedo = false
                     } else {
                         Toast.makeText(applicationContext, "API Error", Toast.LENGTH_LONG).show()
                     }
@@ -229,8 +229,12 @@ class RewritelyService : AccessibilityService() {
         val node = currentNode?.get()?.takeIf { it.stillValid() } ?: return
         val popup = PopupMenu(this, anchor)
         popup.menuInflater.inflate(R.menu.popup_menu, popup.menu)
-        popup.menu.findItem(R.id.action_undo).isVisible = canUndo
-        popup.menu.findItem(R.id.action_redo).isVisible = canRedo
+
+        // popup.menu.findItem(R.id.action_undo).isVisible = canUndo
+        // popup.menu.findItem(R.id.action_redo).isVisible = canRedo
+        // Hide undo/redo menu items completely
+        popup.menu.findItem(R.id.action_undo)?.isVisible = false
+        popup.menu.findItem(R.id.action_redo)?.isVisible = false
 
         // <-- FIX: Prevent us from hiding the icon while this menu is open
         isOptionsMenuShowing = true
@@ -244,6 +248,7 @@ class RewritelyService : AccessibilityService() {
                     fetchNewText("Just fix the grammar: ")
                     true
                 }
+                /* Commented out to disable undo/redo functionality
                 R.id.action_undo -> {
                     setText(node, originalText)
                     canUndo = false
@@ -256,6 +261,7 @@ class RewritelyService : AccessibilityService() {
                     canUndo = true
                     true
                 }
+                */
                 else -> false
             }
         }
