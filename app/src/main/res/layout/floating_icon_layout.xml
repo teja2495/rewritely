@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/floating_container"
     android:layout_width="wrap_content"
-    android:layout_height="wrap_content">
+    android:layout_height="wrap_content"
+    android:orientation="horizontal">
 
     <ImageView
         android:id="@+id/floating_icon_image"
@@ -14,9 +16,8 @@
 <!--        android:id="@+id/options_icon_image"-->
 <!--        android:layout_width="25dp"-->
 <!--        android:layout_height="25dp"-->
+<!--        android:layout_marginStart="8dp"-->
 <!--        android:src="@drawable/options_icon"-->
-<!--        android:layout_marginStart="40dp"-->
-<!--        android:layout_marginTop="3dp"-->
 <!--        android:elevation="8dp" />-->
 
-</FrameLayout>
+</LinearLayout>

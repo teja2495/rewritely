@@ -6,6 +6,7 @@ import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
 import android.graphics.Point
 import android.os.*
@@ -13,6 +14,7 @@ import android.view.*
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.ImageView
+import android.widget.PopupMenu
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.*
@@ -27,14 +29,22 @@ class RewritelyService : AccessibilityService() {
     private lateinit var params: WindowManager.LayoutParams
     private var floatingIcon: View? = null
 
+    // Undo/Redo state
+    private var originalText: String = ""
+    private var aiReply: String = ""
+    private var promptPrefix: String = "Rewrite in common language:"
+    private var canUndo = false
+    private var canRedo = false
+
     private var currentNode: WeakReference<AccessibilityNodeInfo>? = null
     private val ignoredFields = mutableSetOf<Pair<String?, String?>>()
 
-    // Icon position
+    // Guard so we don't hide the icon while the menu is visible
+    private var isOptionsMenuShowing = false
+
+    // Icon position & drag state
     private var lastX = 0
     private var lastY = 0
-
-    // Drag / long-press
     private var initialX = 0
     private var initialY = 0
     private var downX = 0f
@@ -44,11 +54,9 @@ class RewritelyService : AccessibilityService() {
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
-    // Foreground
+    // Foreground notification channel
     private val channelId = "InputAssistChannel"
     private val notificationId = 1
-
-    /* ---------- Service ---------- */
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -60,54 +68,63 @@ class RewritelyService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        // <-- FIX: while our PopupMenu is up, ignore ALL events
+        if (isOptionsMenuShowing) return
+
         when (event?.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
                 clearIgnoredIfAppChanged(event.packageName?.toString())
                 handleFocusChange(findFocus(AccessibilityNodeInfo.FOCUS_INPUT))
             }
-            AccessibilityEvent.TYPE_VIEW_FOCUSED       -> handleFocusChange(event.source)
-            AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED  -> handleFocusChange(findFocus(AccessibilityNodeInfo.FOCUS_INPUT))
+            AccessibilityEvent.TYPE_VIEW_FOCUSED       ->
+                handleFocusChange(event.source)
+            AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED  ->
+                handleFocusChange(findFocus(AccessibilityNodeInfo.FOCUS_INPUT))
         }
     }
 
     override fun onInterrupt() = cleanup()
-    override fun onDestroy()   { cleanup(); stopForeground(STOP_FOREGROUND_REMOVE) }
-    override fun onUnbind(i: Intent?) = cleanup().let { super.onUnbind(i) }
-
-    /* ---------- Focus ---------- */
+    override fun onDestroy()  { cleanup(); stopForeground(STOP_FOREGROUND_REMOVE) }
+    override fun onUnbind(intent: Intent?): Boolean {
+        cleanup()
+        return super.onUnbind(intent)
+    }
 
     private fun handleFocusChange(node: AccessibilityNodeInfo?) {
         val fresh = node?.let { tryObtain(it) }
-        val id = fresh?.id()
-
-        if (id in ignoredFields) return hideIcon()
-
+        val id    = fresh?.id()
+        if (id in ignoredFields) {
+            fresh?.recycle()
+            return hideIcon()
+        }
         if (fresh?.isEditable == true && fresh.isFocused) {
             currentNode = WeakReference(fresh)
             updateIcon()
         } else {
             currentNode?.clear()
-            currentNode = null
             hideIcon()
             fresh?.recycle()
         }
     }
-
-    /* ---------- Icon ---------- */
 
     @SuppressLint("ClickableViewAccessibility")
     private fun updateIcon() {
         val node = currentNode?.get() ?: return hideIcon()
         if (!node.stillValid()) return hideIcon()
 
-        val words = node.text?.split("\\s+".toRegex())?.count { it.isNotBlank() } ?: 0
+        val words = node.text
+            ?.split("\\s+".toRegex())
+            ?.count { it.isNotBlank() } ?: 0
         if (words <= 2) return hideIcon()
 
         if (floatingIcon == null) {
             floatingIcon = LayoutInflater.from(this)
                 .inflate(R.layout.floating_icon_layout, null)
                 .apply {
-                    findViewById<ImageView>(R.id.floating_icon_image).setOnTouchListener(iconTouchListener())
+                    findViewById<ImageView>(R.id.floating_icon_image)
+                        .setOnTouchListener(iconTouchListener())
+//                    findViewById<ImageView>(R.id.options_icon_image)
+//                        .setOnClickListener { showOptionsMenu(it) }
                     windowManager.addView(this, params.apply { x = lastX; y = lastY })
                 }
         }
@@ -118,8 +135,6 @@ class RewritelyService : AccessibilityService() {
         floatingIcon?.let { runCatching { windowManager.removeView(it) } }
         floatingIcon = null
     }
-
-    /* ---------- Icon actions ---------- */
 
     private fun iconTouchListener() = View.OnTouchListener { v, e ->
         val size = Point().also { windowManager.defaultDisplay.getSize(it) }
@@ -137,8 +152,11 @@ class RewritelyService : AccessibilityService() {
                 true
             }
             MotionEvent.ACTION_MOVE -> {
-                if (!isDragging && (abs(e.rawX - downX) > slop || abs(e.rawY - downY) > slop)) {
-                    isDragging = true; longPressJob?.cancel()
+                if (!isDragging &&
+                    (abs(e.rawX - downX) > slop || abs(e.rawY - downY) > slop)
+                ) {
+                    isDragging = true
+                    longPressJob?.cancel()
                 }
                 if (isDragging) {
                     params.x = clamp(initialX + (e.rawX - downX).toInt(), 0, size.x - v.width)
@@ -149,9 +167,13 @@ class RewritelyService : AccessibilityService() {
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 longPressJob?.cancel(); longPressJob = null
-                if (isDragging) { lastX = params.x; lastY = params.y }
-                else if (e.action == MotionEvent.ACTION_UP) onIconClick()
-                isDragging = false; true
+                if (isDragging) {
+                    lastX = params.x; lastY = params.y
+                } else if (e.action == MotionEvent.ACTION_UP) {
+                    onIconClick()
+                }
+                isDragging = false
+                true
             }
             else -> false
         }
@@ -171,10 +193,14 @@ class RewritelyService : AccessibilityService() {
             ?: return Toast.makeText(this, "API Key not set.", Toast.LENGTH_LONG).show()
 
         val original = node.text?.toString().orEmpty()
-        if (original.isBlank()) return Toast.makeText(this, "Nothing to rewrite.", Toast.LENGTH_SHORT).show()
+        if (original.isBlank()) {
+            return Toast.makeText(this, "Nothing to rewrite.", Toast.LENGTH_SHORT).show()
+        }
 
+        // save for undo
+        originalText = original
         Toast.makeText(this, "Sending to AI...", Toast.LENGTH_SHORT).show()
-        val prompt = "Rewrite in common language: $original"
+        val prompt = "$promptPrefix $original"
 
         scope.launch(Dispatchers.IO) {
             runCatching {
@@ -183,8 +209,14 @@ class RewritelyService : AccessibilityService() {
             }.onSuccess { res ->
                 withContext(Dispatchers.Main) {
                     val reply = res.body()?.choices?.firstOrNull()?.message?.content?.trim()
-                    if (res.isSuccessful && !reply.isNullOrBlank()) setText(node, reply)
-                    else Toast.makeText(applicationContext, "API Error", Toast.LENGTH_LONG).show()
+                    if (res.isSuccessful && !reply.isNullOrBlank()) {
+                        aiReply = reply
+                        setText(node, reply)
+                        canUndo = true
+                        canRedo = false
+                    } else {
+                        Toast.makeText(applicationContext, "API Error", Toast.LENGTH_LONG).show()
+                    }
                 }
             }.onFailure {
                 withContext(Dispatchers.Main) {
@@ -194,7 +226,79 @@ class RewritelyService : AccessibilityService() {
         }
     }
 
-    /* ---------- Helpers ---------- */
+    private fun showOptionsMenu(anchor: View) {
+        val node = currentNode?.get()?.takeIf { it.stillValid() } ?: return
+        val popup = PopupMenu(this, anchor)
+        popup.menuInflater.inflate(R.menu.popup_menu, popup.menu)
+        popup.menu.findItem(R.id.action_undo).isVisible = canUndo
+        popup.menu.findItem(R.id.action_redo).isVisible = canRedo
+
+        // <-- FIX: Prevent us from hiding the icon while this menu is open
+        isOptionsMenuShowing = true
+        popup.setOnDismissListener {
+            isOptionsMenuShowing = false
+        }
+
+        popup.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                R.id.action_fix_grammar -> {
+                    promptPrefix = "Fix Grammar:"
+                    performFixGrammar()
+                    true
+                }
+                R.id.action_undo -> {
+                    setText(node, originalText)
+                    canUndo = false
+                    canRedo = true
+                    true
+                }
+                R.id.action_redo -> {
+                    setText(node, aiReply)
+                    canRedo = false
+                    canUndo = true
+                    true
+                }
+                else -> false
+            }
+        }
+        popup.show()
+    }
+
+    private fun performFixGrammar() {
+        val node = currentNode?.get()?.takeIf { it.stillValid() } ?: return
+        val apiKey = SecurePrefs.getApiKey(this)
+            ?: return Toast.makeText(this, "API Key not set.", Toast.LENGTH_LONG).show()
+
+        if (originalText.isBlank()) {
+            return Toast.makeText(this, "Nothing to fix.", Toast.LENGTH_SHORT).show()
+        }
+
+        Toast.makeText(this, "Fixing grammar...", Toast.LENGTH_SHORT).show()
+        val prompt = "$promptPrefix $originalText"
+
+        scope.launch(Dispatchers.IO) {
+            runCatching {
+                val request = OpenAiRequest(messages = listOf(Message(content = prompt)))
+                ApiClient.instance.getCompletion("Bearer $apiKey", request)
+            }.onSuccess { res ->
+                withContext(Dispatchers.Main) {
+                    val reply = res.body()?.choices?.firstOrNull()?.message?.content?.trim()
+                    if (res.isSuccessful && !reply.isNullOrBlank()) {
+                        aiReply = reply
+                        setText(node, reply)
+                        canUndo = true
+                        canRedo = false
+                    } else {
+                        Toast.makeText(applicationContext, "API Error", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }.onFailure {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(applicationContext, R.string.network_error, Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
 
     private fun setText(node: AccessibilityNodeInfo, text: String) {
         Bundle().apply {
@@ -208,18 +312,24 @@ class RewritelyService : AccessibilityService() {
         }
     }
 
-    private fun AccessibilityNodeInfo.id() = Pair(packageName?.toString(), viewIdResourceName)
-    private fun AccessibilityNodeInfo.stillValid() = runCatching { refresh(); isEditable && isFocused }.getOrDefault(false)
-    private fun tryObtain(n: AccessibilityNodeInfo) = runCatching { AccessibilityNodeInfo.obtain(n).apply { refresh() } }.getOrNull()
+    // --- Utilities & Service setup ---
+
+    private fun AccessibilityNodeInfo.id() =
+        Pair(packageName?.toString(), viewIdResourceName)
+
+    private fun AccessibilityNodeInfo.stillValid() =
+        runCatching { refresh(); isEditable && isFocused }.getOrDefault(false)
+
+    private fun tryObtain(n: AccessibilityNodeInfo) =
+        runCatching { AccessibilityNodeInfo.obtain(n).apply { refresh() } }.getOrNull()
 
     private fun clamp(v: Int, min: Int, max: Int) = max(min, min(v, max))
-
-    /* ---------- Service setup ---------- */
 
     private fun createLayoutParams() = WindowManager.LayoutParams(
         WindowManager.LayoutParams.WRAP_CONTENT,
         WindowManager.LayoutParams.WRAP_CONTENT,
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
         else WindowManager.LayoutParams.TYPE_PHONE,
         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
         PixelFormat.TRANSLUCENT
@@ -244,12 +354,12 @@ class RewritelyService : AccessibilityService() {
     }
 
     private fun startForeground() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             getSystemService(NotificationManager::class.java)
                 ?.createNotificationChannel(
                     NotificationChannel(channelId, "Input Assist", NotificationManager.IMPORTANCE_MIN)
                 )
-
+        }
         val notification = NotificationCompat.Builder(this, channelId)
             .setContentTitle(getString(R.string.foreground_notification_title))
             .setContentText(getString(R.string.foreground_notification_text))
@@ -258,8 +368,9 @@ class RewritelyService : AccessibilityService() {
             .build()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
-            startForeground(notificationId, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
-        else startForeground(notificationId, notification)
+            startForeground(notificationId, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        else
+            startForeground(notificationId, notification)
     }
 
     private var lastPackage: String? = null
@@ -269,8 +380,6 @@ class RewritelyService : AccessibilityService() {
             lastPackage = pkg
         }
     }
-
-    /* ---------- Clean up ---------- */
 
     private fun cleanup() {
         hideIcon()
