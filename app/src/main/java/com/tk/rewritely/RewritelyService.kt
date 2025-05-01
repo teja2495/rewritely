@@ -32,7 +32,6 @@ class RewritelyService : AccessibilityService() {
     // Undo/Redo state
     private var originalText: String = ""
     private var aiReply: String = ""
-    private var promptPrefix: String = "Rewrite in common language:"
     private var canUndo = false
     private var canRedo = false
 
@@ -170,7 +169,7 @@ class RewritelyService : AccessibilityService() {
                 if (isDragging) {
                     lastX = params.x; lastY = params.y
                 } else if (e.action == MotionEvent.ACTION_UP) {
-                    onIconClick()
+                    fetchNewText("Rewrite in common language: ")
                 }
                 isDragging = false
                 true
@@ -185,7 +184,7 @@ class RewritelyService : AccessibilityService() {
         hideIcon()
     }
 
-    private fun onIconClick() {
+    private fun fetchNewText(prefix: String) {
         val node = currentNode?.get()?.takeIf { it.stillValid() } ?: return
         if (node.id() in ignoredFields) return hideIcon()
 
@@ -200,7 +199,7 @@ class RewritelyService : AccessibilityService() {
         // save for undo
         originalText = original
         Toast.makeText(this, "Sending to AI...", Toast.LENGTH_SHORT).show()
-        val prompt = "$promptPrefix $original"
+        val prompt = "$prefix $original"
 
         scope.launch(Dispatchers.IO) {
             runCatching {
@@ -242,8 +241,7 @@ class RewritelyService : AccessibilityService() {
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 R.id.action_fix_grammar -> {
-                    promptPrefix = "Fix Grammar:"
-                    performFixGrammar()
+                    fetchNewText("Just fix the grammar: ")
                     true
                 }
                 R.id.action_undo -> {
@@ -262,42 +260,6 @@ class RewritelyService : AccessibilityService() {
             }
         }
         popup.show()
-    }
-
-    private fun performFixGrammar() {
-        val node = currentNode?.get()?.takeIf { it.stillValid() } ?: return
-        val apiKey = SecurePrefs.getApiKey(this)
-            ?: return Toast.makeText(this, "API Key not set.", Toast.LENGTH_LONG).show()
-
-        if (originalText.isBlank()) {
-            return Toast.makeText(this, "Nothing to fix.", Toast.LENGTH_SHORT).show()
-        }
-
-        Toast.makeText(this, "Fixing grammar...", Toast.LENGTH_SHORT).show()
-        val prompt = "$promptPrefix $originalText"
-
-        scope.launch(Dispatchers.IO) {
-            runCatching {
-                val request = OpenAiRequest(messages = listOf(Message(content = prompt)))
-                ApiClient.instance.getCompletion("Bearer $apiKey", request)
-            }.onSuccess { res ->
-                withContext(Dispatchers.Main) {
-                    val reply = res.body()?.choices?.firstOrNull()?.message?.content?.trim()
-                    if (res.isSuccessful && !reply.isNullOrBlank()) {
-                        aiReply = reply
-                        setText(node, reply)
-                        canUndo = true
-                        canRedo = false
-                    } else {
-                        Toast.makeText(applicationContext, "API Error", Toast.LENGTH_LONG).show()
-                    }
-                }
-            }.onFailure {
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(applicationContext, R.string.network_error, Toast.LENGTH_LONG).show()
-                }
-            }
-        }
     }
 
     private fun setText(node: AccessibilityNodeInfo, text: String) {
