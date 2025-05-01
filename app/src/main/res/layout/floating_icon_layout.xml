@@ -5,9 +5,18 @@
 
     <ImageView
         android:id="@+id/floating_icon_image"
-        android:layout_width="30dp"
-        android:layout_height="30dp"
+        android:layout_width="27dp"
+        android:layout_height="27dp"
         android:src="@drawable/sparkle"
         android:elevation="8dp" />
-x
+
+<!--    <ImageView-->
+<!--        android:id="@+id/options_icon_image"-->
+<!--        android:layout_width="25dp"-->
+<!--        android:layout_height="25dp"-->
+<!--        android:src="@drawable/options_icon"-->
+<!--        android:layout_marginStart="40dp"-->
+<!--        android:layout_marginTop="3dp"-->
+<!--        android:elevation="8dp" />-->
+
 </FrameLayout>
