@@ -29,7 +29,7 @@ class RewritelyService : AccessibilityService() {
     private lateinit var params: WindowManager.LayoutParams
     private var floatingIcon: View? = null
 
-    // Undo/Redo state - commented out to disable functionality
+    // Undo/Redo state
     // private var originalText: String = ""
     // private var newText: String = ""
     // private var canUndo = false
@@ -67,7 +67,7 @@ class RewritelyService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // <-- FIX: while our PopupMenu is up, ignore ALL events
+        // While our PopupMenu is up, ignore ALL events
         if (isOptionsMenuShowing) return
 
         when (event?.eventType) {
@@ -75,15 +75,18 @@ class RewritelyService : AccessibilityService() {
                 clearIgnoredIfAppChanged(event.packageName?.toString())
                 handleFocusChange(findFocus(AccessibilityNodeInfo.FOCUS_INPUT))
             }
-            AccessibilityEvent.TYPE_VIEW_FOCUSED       ->
+            AccessibilityEvent.TYPE_VIEW_FOCUSED ->
                 handleFocusChange(event.source)
-            AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED  ->
+            AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED ->
                 handleFocusChange(findFocus(AccessibilityNodeInfo.FOCUS_INPUT))
         }
     }
 
     override fun onInterrupt() = cleanup()
-    override fun onDestroy()  { cleanup(); stopForeground(STOP_FOREGROUND_REMOVE) }
+    override fun onDestroy() {
+        cleanup()
+        stopForeground(STOP_FOREGROUND_REMOVE)
+    }
     override fun onUnbind(intent: Intent?): Boolean {
         cleanup()
         return super.onUnbind(intent)
@@ -91,7 +94,7 @@ class RewritelyService : AccessibilityService() {
 
     private fun handleFocusChange(node: AccessibilityNodeInfo?) {
         val fresh = node?.let { tryObtain(it) }
-        val id    = fresh?.id()
+        val id = fresh?.id()
         if (id in ignoredFields) {
             fresh?.recycle()
             return hideIcon()
@@ -120,17 +123,21 @@ class RewritelyService : AccessibilityService() {
             floatingIcon = LayoutInflater.from(this)
                 .inflate(R.layout.floating_icon_layout, null)
                 .apply {
+                    // Use the same touch listener for both child icons
+                    val touchListener = iconTouchListener()
                     findViewById<ImageView>(R.id.floating_icon_image)
-                        .setOnTouchListener(iconTouchListener())
+                        .setOnTouchListener(touchListener)
                     findViewById<ImageView>(R.id.options_icon_image)
-                        .setOnClickListener { showOptionsMenu(it) }
+                        .setOnTouchListener(touchListener)
+
                     windowManager.addView(this, params.apply { x = lastX; y = lastY })
                 }
         }
     }
 
     private fun hideIcon() {
-        longPressJob?.cancel(); longPressJob = null
+        longPressJob?.cancel()
+        longPressJob = null
         floatingIcon?.let { runCatching { windowManager.removeView(it) } }
         floatingIcon = null
     }
@@ -141,8 +148,10 @@ class RewritelyService : AccessibilityService() {
 
         when (e.action) {
             MotionEvent.ACTION_DOWN -> {
-                initialX = params.x; initialY = params.y
-                downX = e.rawX; downY = e.rawY
+                initialX = params.x
+                initialY = params.y
+                downX = e.rawX
+                downY = e.rawY
                 isDragging = false
                 longPressJob = scope.launch {
                     delay(ViewConfiguration.getLongPressTimeout().toLong())
@@ -150,6 +159,7 @@ class RewritelyService : AccessibilityService() {
                 }
                 true
             }
+
             MotionEvent.ACTION_MOVE -> {
                 if (!isDragging &&
                     (abs(e.rawX - downX) > slop || abs(e.rawY - downY) > slop)
@@ -164,16 +174,25 @@ class RewritelyService : AccessibilityService() {
                 }
                 true
             }
+
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                longPressJob?.cancel(); longPressJob = null
+                longPressJob?.cancel()
+                longPressJob = null
                 if (isDragging) {
-                    lastX = params.x; lastY = params.y
+                    lastX = params.x
+                    lastY = params.y
                 } else if (e.action == MotionEvent.ACTION_UP) {
-                    fetchNewText("Rewrite in common language: ")
+                    // Dispatch tap based on which icon was touched
+                    if (v.id == R.id.options_icon_image) {
+                        showOptionsMenu(v)
+                    } else {
+                        fetchNewText("Rewrite in common language: ")
+                    }
                 }
                 isDragging = false
                 true
             }
+
             else -> false
         }
     }
@@ -196,7 +215,6 @@ class RewritelyService : AccessibilityService() {
             return Toast.makeText(this, "Nothing to rewrite.", Toast.LENGTH_SHORT).show()
         }
 
-        // save for undo
         // originalText = original
         Toast.makeText(this, "Sending to AI...", Toast.LENGTH_SHORT).show()
         val prompt = "$prefix $original"
@@ -211,8 +229,7 @@ class RewritelyService : AccessibilityService() {
                     if (res.isSuccessful && !result.isNullOrBlank()) {
                         // newText = result
                         setText(node, result)
-                        // canUndo = true
-                        // canRedo = false
+                        // canUndo = true; canRedo = false
                     } else {
                         Toast.makeText(applicationContext, "API Error", Toast.LENGTH_LONG).show()
                     }
@@ -230,17 +247,12 @@ class RewritelyService : AccessibilityService() {
         val popup = PopupMenu(this, anchor)
         popup.menuInflater.inflate(R.menu.popup_menu, popup.menu)
 
-        // popup.menu.findItem(R.id.action_undo).isVisible = canUndo
-        // popup.menu.findItem(R.id.action_redo).isVisible = canRedo
-        // Hide undo/redo menu items completely
+        // Hide undo/redo menu items
         popup.menu.findItem(R.id.action_undo)?.isVisible = false
         popup.menu.findItem(R.id.action_redo)?.isVisible = false
 
-        // <-- FIX: Prevent us from hiding the icon while this menu is open
         isOptionsMenuShowing = true
-        popup.setOnDismissListener {
-            isOptionsMenuShowing = false
-        }
+        popup.setOnDismissListener { isOptionsMenuShowing = false }
 
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
@@ -248,20 +260,6 @@ class RewritelyService : AccessibilityService() {
                     fetchNewText("Just fix the grammar: ")
                     true
                 }
-                /* Commented out to disable undo/redo functionality
-                R.id.action_undo -> {
-                    setText(node, originalText)
-                    canUndo = false
-                    canRedo = true
-                    true
-                }
-                R.id.action_redo -> {
-                    setText(node, newText)
-                    canRedo = false
-                    canUndo = true
-                    true
-                }
-                */
                 else -> false
             }
         }
@@ -275,7 +273,7 @@ class RewritelyService : AccessibilityService() {
         }
         Bundle().apply {
             putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, text.length)
-            putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT,   text.length)
+            putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, text.length)
             node.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, this)
         }
     }
@@ -298,7 +296,8 @@ class RewritelyService : AccessibilityService() {
         WindowManager.LayoutParams.WRAP_CONTENT,
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-        else WindowManager.LayoutParams.TYPE_PHONE,
+        else
+            WindowManager.LayoutParams.TYPE_PHONE,
         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
         PixelFormat.TRANSLUCENT
     ).apply { gravity = Gravity.TOP or Gravity.START }
