@@ -28,11 +28,8 @@ class RewritelyService : AccessibilityService() {
     private lateinit var params: WindowManager.LayoutParams
     private var floatingIcon: View? = null
 
-    private var currentText: String = ""
     private var originalText: String = ""
     private var newText: String = ""
-    private var canUndo = false
-    private var canRedo = false
 
     private var lastPackage: String? = null
 
@@ -212,7 +209,7 @@ class RewritelyService : AccessibilityService() {
             hideIcon()
             return ""
         }
-        currentText = node.text?.toString().orEmpty()
+        val currentText = node.text?.toString().orEmpty()
         return currentText
     }
 
@@ -259,8 +256,6 @@ class RewritelyService : AccessibilityService() {
                     if (res.isSuccessful && !result.isNullOrBlank()) {
                         setInputFieldText(result)
                         newText = result
-                        canUndo = true
-                        canRedo = false
                     } else {
                         Toast.makeText(applicationContext, "API Error", Toast.LENGTH_LONG).show()
                     }
@@ -280,8 +275,10 @@ class RewritelyService : AccessibilityService() {
         val popup = PopupMenu(this, anchor)
         popup.menuInflater.inflate(R.menu.popup_menu, popup.menu)
 
-        popup.menu.findItem(R.id.action_undo)?.isVisible = getInputFieldText() === newText && originalText.isNotBlank()
-        popup.menu.findItem(R.id.action_redo)?.isVisible = getInputFieldText() === originalText && newText.isNotBlank()
+        popup.menu.findItem(R.id.action_undo)?.isVisible =
+               false // getInputFieldText() == newText && originalText.isNotBlank()
+        popup.menu.findItem(R.id.action_redo)?.isVisible =
+                getInputFieldText() == originalText && newText.isNotBlank()
 
         isOptionsMenuShowing = true
         popup.setOnDismissListener { isOptionsMenuShowing = false }
