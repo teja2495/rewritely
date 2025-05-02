@@ -241,16 +241,14 @@ class RewritelyService : AccessibilityService() {
                 SecurePrefs.getApiKey(this)
                         ?: return Toast.makeText(this, "API Key not set.", Toast.LENGTH_LONG).show()
 
-        val original = getInputFieldText()
-        if (original.isBlank()) {
+        originalText = getInputFieldText()
+        if (originalText.isBlank()) {
             return Toast.makeText(this, "Nothing to rewrite.", Toast.LENGTH_SHORT).show()
         }
 
         isFetchInProgress = true
         Toast.makeText(this, "Sending to AI...", Toast.LENGTH_SHORT).show()
-        val prompt = "$prefix $original"
-
-        originalText = original
+        val prompt = "$prefix $originalText"
 
         scope.launch(Dispatchers.IO) {
             try {
