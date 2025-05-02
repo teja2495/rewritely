@@ -282,7 +282,7 @@ class RewritelyService : AccessibilityService() {
         val popup = PopupMenu(this, anchor)
         popup.menuInflater.inflate(R.menu.popup_menu, popup.menu)
 
-        popup.menu.findItem(R.id.action_undo)?.isVisible = true
+        popup.menu.findItem(R.id.action_undo)?.isVisible = getInputFieldText() === newText && originalText.isNotBlank()
         popup.menu.findItem(R.id.action_redo)?.isVisible = getInputFieldText() === originalText && newText.isNotBlank()
 
         isOptionsMenuShowing = true
