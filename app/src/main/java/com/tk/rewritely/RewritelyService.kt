@@ -28,10 +28,13 @@ class RewritelyService : AccessibilityService() {
     private lateinit var params: WindowManager.LayoutParams
     private var floatingIcon: View? = null
 
-    // private var originalText: String = ""
-    // private var newText: String = ""
-    // private var canUndo = false
-    // private var canRedo = false
+    private var currentText: String = ""
+    private var originalText: String = ""
+    private var newText: String = ""
+    private var canUndo = false
+    private var canRedo = false
+
+    private var lastPackage: String? = null
 
     private var currentNode: WeakReference<AccessibilityNodeInfo>? = null
     private val ignoredFields = mutableSetOf<Pair<String?, String?>>()
@@ -187,7 +190,7 @@ class RewritelyService : AccessibilityService() {
                             if (v.id == R.id.options_icon_image) {
                                 showOptionsMenu(v)
                             } else {
-                                fetchNewText("Rewrite in common language: ")
+                                fetchNewText("Rewrite in common language, NEVER use dashes: ")
                             }
                         }
                         isDragging = false
@@ -203,21 +206,42 @@ class RewritelyService : AccessibilityService() {
         hideIcon()
     }
 
-    private fun fetchNewText(prefix: String) {
-        // 1) prevent concurrent API calls
-        if (isFetchInProgress) return
-
-        val node = currentNode?.get()?.takeIf { it.stillValid() } ?: return
+    private fun getInputFieldText(): String {
+        val node = currentNode?.get()?.takeIf { it.stillValid() } ?: return ""
         if (node.id() in ignoredFields) {
             hideIcon()
-            return
+            return ""
         }
+        currentText = node.text?.toString().orEmpty()
+        return currentText
+    }
+
+    private fun setInputFieldText(text: String) {
+        val node = currentNode?.get()?.takeIf { it.stillValid() }
+        Bundle().apply {
+            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
+            if (node != null) {
+                node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, this)
+            }
+        }
+        Bundle().apply {
+            putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, text.length)
+            putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, text.length)
+            if (node != null) {
+                node.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, this)
+            }
+        }
+    }
+
+    // OpenAI API Call
+    private fun fetchNewText(prefix: String) {
+        if (isFetchInProgress) return
 
         val apiKey =
                 SecurePrefs.getApiKey(this)
                         ?: return Toast.makeText(this, "API Key not set.", Toast.LENGTH_LONG).show()
 
-        val original = node.text?.toString().orEmpty()
+        val original = getInputFieldText()
         if (original.isBlank()) {
             return Toast.makeText(this, "Nothing to rewrite.", Toast.LENGTH_SHORT).show()
         }
@@ -226,6 +250,8 @@ class RewritelyService : AccessibilityService() {
         Toast.makeText(this, "Sending to AI...", Toast.LENGTH_SHORT).show()
         val prompt = "$prefix $original"
 
+        originalText = original
+
         scope.launch(Dispatchers.IO) {
             try {
                 val request = OpenAiRequest(messages = listOf(Message(content = prompt)))
@@ -233,7 +259,10 @@ class RewritelyService : AccessibilityService() {
                 withContext(Dispatchers.Main) {
                     val result = res.body()?.choices?.firstOrNull()?.message?.content?.trim()
                     if (res.isSuccessful && !result.isNullOrBlank()) {
-                        setText(node, result)
+                        setInputFieldText(result)
+                        newText = result
+                        canUndo = true
+                        canRedo = false
                     } else {
                         Toast.makeText(applicationContext, "API Error", Toast.LENGTH_LONG).show()
                     }
@@ -250,12 +279,11 @@ class RewritelyService : AccessibilityService() {
     }
 
     private fun showOptionsMenu(anchor: View) {
-        val node = currentNode?.get()?.takeIf { it.stillValid() } ?: return
         val popup = PopupMenu(this, anchor)
         popup.menuInflater.inflate(R.menu.popup_menu, popup.menu)
 
-        popup.menu.findItem(R.id.action_undo)?.isVisible = false
-        popup.menu.findItem(R.id.action_redo)?.isVisible = false
+        popup.menu.findItem(R.id.action_undo)?.isVisible = true
+        popup.menu.findItem(R.id.action_redo)?.isVisible = getInputFieldText() === originalText && newText.isNotBlank()
 
         isOptionsMenuShowing = true
         popup.setOnDismissListener { isOptionsMenuShowing = false }
@@ -266,22 +294,18 @@ class RewritelyService : AccessibilityService() {
                     fetchNewText("Just fix the grammar: ")
                     true
                 }
+                R.id.action_undo -> {
+                    setInputFieldText(originalText)
+                    true
+                }
+                R.id.action_redo -> {
+                    setInputFieldText(newText)
+                    true
+                }
                 else -> false
             }
         }
         popup.show()
-    }
-
-    private fun setText(node: AccessibilityNodeInfo, text: String) {
-        Bundle().apply {
-            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
-            node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, this)
-        }
-        Bundle().apply {
-            putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, text.length)
-            putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, text.length)
-            node.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, this)
-        }
     }
 
     private fun AccessibilityNodeInfo.id() = Pair(packageName?.toString(), viewIdResourceName)
@@ -359,7 +383,6 @@ class RewritelyService : AccessibilityService() {
         else startForeground(notificationId, notification)
     }
 
-    private var lastPackage: String? = null
     private fun clearIgnoredIfAppChanged(pkg: String?) {
         if (pkg != null && pkg != lastPackage) {
             ignoredFields.removeAll { it.first == pkg }
