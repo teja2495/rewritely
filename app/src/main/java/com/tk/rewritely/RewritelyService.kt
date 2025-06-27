@@ -187,7 +187,7 @@ class RewritelyService : AccessibilityService() {
                             if (v.id == R.id.options_icon_image) {
                                 showOptionsMenu(v)
                             } else {
-                                fetchNewText("Rewrite in common language, NEVER use dashes: ")
+                                fetchNewText("Rewrite in common language, NEVER use Em Dashes: ")
                             }
                         }
                         isDragging = false
@@ -276,7 +276,7 @@ class RewritelyService : AccessibilityService() {
         popup.menuInflater.inflate(R.menu.popup_menu, popup.menu)
 
         popup.menu.findItem(R.id.action_undo)?.isVisible =
-               false // getInputFieldText() == newText && originalText.isNotBlank()
+                false // getInputFieldText() == newText && originalText.isNotBlank()
         popup.menu.findItem(R.id.action_redo)?.isVisible =
                 getInputFieldText() == originalText && newText.isNotBlank()
 
