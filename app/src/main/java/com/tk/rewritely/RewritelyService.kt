@@ -122,8 +122,8 @@ class RewritelyService : AccessibilityService() {
                         val touchListener = iconTouchListener()
                         findViewById<ImageView>(R.id.floating_icon_image)
                                 .setOnTouchListener(touchListener)
-                        findViewById<ImageView>(R.id.options_icon_image)
-                                .setOnTouchListener(touchListener)
+//                        findViewById<ImageView>(R.id.options_icon_image)
+//                                .setOnTouchListener(touchListener)
                         windowManager.addView(
                                 this,
                                 params.apply {
@@ -184,11 +184,11 @@ class RewritelyService : AccessibilityService() {
                             lastX = params.x
                             lastY = params.y
                         } else if (e.action == MotionEvent.ACTION_UP) {
-                            if (v.id == R.id.options_icon_image) {
-                                showOptionsMenu(v)
-                            } else {
-                                fetchNewText("Rewrite in common language, NEVER use Em Dashes: ")
-                            }
+                            //if (v.id == R.id.options_icon_image) {
+                            //    showOptionsMenu(v)
+                            //} else {
+                                fetchNewText("Rewrite in common language. NEVER use Em Dashes. Give the output in English: ")
+                            //}
                         }
                         isDragging = false
                         true
