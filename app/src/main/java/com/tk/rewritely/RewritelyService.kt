@@ -50,7 +50,6 @@ class RewritelyService : AccessibilityService() {
     private var downX = 0f
     private var downY = 0f
     private var isDragging = false
-    private var longPressJob: Job? = null
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
@@ -136,8 +135,6 @@ class RewritelyService : AccessibilityService() {
     }
 
     private fun hideIcon() {
-        longPressJob?.cancel()
-        longPressJob = null
         floatingIcon?.let { runCatching { windowManager.removeView(it) } }
         floatingIcon = null
     }
@@ -154,11 +151,6 @@ class RewritelyService : AccessibilityService() {
                         downX = e.rawX
                         downY = e.rawY
                         isDragging = false
-                        longPressJob =
-                                scope.launch {
-                                    delay(ViewConfiguration.getLongPressTimeout().toLong())
-                                    if (!isDragging) onIconLongPress()
-                                }
                         true
                     }
                     MotionEvent.ACTION_MOVE -> {
@@ -166,7 +158,6 @@ class RewritelyService : AccessibilityService() {
                                         (abs(e.rawX - downX) > slop || abs(e.rawY - downY) > slop)
                         ) {
                             isDragging = true
-                            longPressJob?.cancel()
                         }
                         if (isDragging) {
                             params.x =
@@ -178,8 +169,6 @@ class RewritelyService : AccessibilityService() {
                         true
                     }
                     MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                        longPressJob?.cancel()
-                        longPressJob = null
                         if (isDragging) {
                             lastX = params.x
                             lastY = params.y
@@ -196,12 +185,6 @@ class RewritelyService : AccessibilityService() {
                     else -> false
                 }
             }
-
-    private fun onIconLongPress() {
-        currentNode?.get()?.id()?.let { ignoredFields += it }
-        Toast.makeText(this, "Icon hidden for this field.", Toast.LENGTH_SHORT).show()
-        hideIcon()
-    }
 
     private fun getInputFieldText(): String {
         val node = currentNode?.get()?.takeIf { it.stillValid() } ?: return ""
