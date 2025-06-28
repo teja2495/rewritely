@@ -17,6 +17,7 @@ import android.widget.ImageView
 import android.widget.PopupMenu
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
+import android.util.Log
 import java.lang.ref.WeakReference
 import kotlin.math.abs
 import kotlin.math.max
@@ -42,6 +43,9 @@ class RewritelyService : AccessibilityService() {
     // Prevent multiple API calls at once
     @Volatile private var isFetchInProgress = false
 
+    // Track rewritten text to prevent rewriting the same content
+    private val rewrittenTexts = mutableSetOf<String>()
+
     // Icon position & drag state
     private var lastX = 0
     private var lastY = 0
@@ -56,6 +60,10 @@ class RewritelyService : AccessibilityService() {
     // Foreground notification channel
     private val channelId = "InputAssistChannel"
     private val notificationId = 1
+
+    companion object {
+        private const val TAG = "RewritelyService"
+    }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -226,7 +234,13 @@ class RewritelyService : AccessibilityService() {
             return Toast.makeText(this, "Nothing to rewrite.", Toast.LENGTH_SHORT).show()
         }
 
+        // Check if this text has already been rewritten
+        if (rewrittenTexts.contains(originalText.trim())) {
+            return Toast.makeText(this, "Text already rewritten.", Toast.LENGTH_SHORT).show()
+        }
+
         isFetchInProgress = true
+        Log.d(TAG, "API call triggered - Prefix: '$prefix', Original text length: ${originalText.length}")
         Toast.makeText(this, "Sending to AI...", Toast.LENGTH_SHORT).show()
         val prompt = "$prefix $originalText"
 
@@ -239,6 +253,8 @@ class RewritelyService : AccessibilityService() {
                     if (res.isSuccessful && !result.isNullOrBlank()) {
                         setInputFieldText(result)
                         newText = result
+                        // Add the rewritten text to tracking set to prevent rewriting it again
+                        rewrittenTexts.add(result.trim())
                     } else {
                         Toast.makeText(applicationContext, "API Error", Toast.LENGTH_LONG).show()
                     }
@@ -274,10 +290,14 @@ class RewritelyService : AccessibilityService() {
                 }
                 R.id.action_undo -> {
                     setInputFieldText(originalText)
+                    // Remove the current text from rewritten set since we're undoing
+                    rewrittenTexts.remove(getInputFieldText().trim())
                     true
                 }
                 R.id.action_redo -> {
                     setInputFieldText(newText)
+                    // Add back to rewritten set since we're redoing
+                    rewrittenTexts.add(newText.trim())
                     true
                 }
                 else -> false
@@ -364,6 +384,8 @@ class RewritelyService : AccessibilityService() {
     private fun clearIgnoredIfAppChanged(pkg: String?) {
         if (pkg != null && pkg != lastPackage) {
             ignoredFields.removeAll { it.first == pkg }
+            // Clear rewritten texts when switching apps to allow fresh rewrites in new app
+            rewrittenTexts.clear()
             lastPackage = pkg
         }
     }
@@ -373,5 +395,6 @@ class RewritelyService : AccessibilityService() {
         scope.cancel()
         currentNode?.clear()
         ignoredFields.clear()
+        rewrittenTexts.clear()
     }
 }
