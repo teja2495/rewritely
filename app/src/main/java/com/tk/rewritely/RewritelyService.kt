@@ -249,7 +249,10 @@ class RewritelyService : AccessibilityService() {
 
         scope.launch(Dispatchers.IO) {
             try {
-                val request = OpenAiRequest(messages = listOf(Message(content = prompt)))
+                val request = OpenAiRequest(
+                    messages = listOf(Message(content = prompt)),
+                    max_tokens = 700
+                )
                 val res = ApiClient.instance.getCompletion("Bearer $apiKey", request)
                 withContext(Dispatchers.Main) {
                     val result = res.body()?.choices?.firstOrNull()?.message?.content?.trim()
