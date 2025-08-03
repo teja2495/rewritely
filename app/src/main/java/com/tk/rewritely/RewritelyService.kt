@@ -153,16 +153,22 @@ class RewritelyService : AccessibilityService() {
                 layoutParams = LinearLayout.LayoutParams(27.dpToPx(), 27.dpToPx())
             }
 
-            // Create options icon
-            optionsIcon = ImageView(this).apply {
-                setImageResource(R.drawable.options_icon)
-                layoutParams = LinearLayout.LayoutParams(25.dpToPx(), 25.dpToPx()).apply {
-                    marginStart = 8.dpToPx()
-                }
-            }
-
+            // Check if API key is set to determine whether to show options icon
+            val hasApiKey = !SecurePrefs.getApiKey(this).isNullOrBlank()
+            
+            // Add sparkle icon first (left side)
             container.addView(sparkleIcon)
-            container.addView(optionsIcon)
+            
+            if (hasApiKey) {
+                // Create options icon only if API key is set
+                optionsIcon = ImageView(this).apply {
+                    setImageResource(R.drawable.options_icon)
+                    layoutParams = LinearLayout.LayoutParams(25.dpToPx(), 25.dpToPx()).apply {
+                        marginStart = 8.dpToPx()
+                    }
+                }
+                container.addView(optionsIcon)
+            }
 
             val touchListener = iconTouchListener()
             sparkleIcon?.setOnTouchListener(touchListener)
@@ -233,7 +239,14 @@ class RewritelyService : AccessibilityService() {
                             if (v == optionsIcon) {
                                 showOptionsMenu(v)
                             } else if (v == sparkleIcon) {
-                                fetchNewText("Rewrite in common language, NEVER use Em Dashes: ")
+                                // Check if API key is set to determine behavior
+                                val hasApiKey = !SecurePrefs.getApiKey(this).isNullOrBlank()
+                                if (hasApiKey) {
+                                    fetchNewText("Rewrite in common language, NEVER use Em Dashes: ")
+                                } else {
+                                    // Use ChatGPT action when API key is not set
+                                    copyTextAndOpenChatGPT()
+                                }
                             }
                         }
                         isDragging = false

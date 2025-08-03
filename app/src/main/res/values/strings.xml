@@ -11,8 +11,8 @@
     <string name="permissions_info">The app requires these permissions to function correctly.</string>
     
     <!-- Custom Options -->
-    <string name="custom_options_title">Custom Options</string>
-    <string name="custom_options_description">Create and manage custom options that will appear in the 3-dot menu.</string>
+    <string name="custom_options_title">Customize</string>
+    <string name="custom_options_description">Customize prompts for default options or create and manage custom options that will appear in the 3-dot menu.</string>
     <string name="add_new_option">Add New Option</string>
     <string name="reset_to_defaults">Reset to Defaults</string>
     <string name="option_name">Option Name</string>
@@ -26,4 +26,5 @@
     <string name="reset_to_default_options">Reset to default options</string>
     <string name="manage_custom_options">Manage</string>
     <string name="max_custom_options_reached">Maximum 4 custom options allowed</string>
+    <string name="api_key_required_message">You cannot add custom options until you set up your OpenAI API key.</string>
 </resources>

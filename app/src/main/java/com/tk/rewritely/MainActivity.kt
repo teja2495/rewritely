@@ -217,6 +217,12 @@ class MainActivity : ComponentActivity() {
         var showEditDialog by remember { mutableStateOf<CustomOption?>(null) }
         var newOptionName by remember { mutableStateOf("") }
         var newOptionPrompt by remember { mutableStateOf("") }
+        var hasApiKey by remember { mutableStateOf(false) }
+
+        // Check if API key is set
+        LaunchedEffect(Unit) {
+            hasApiKey = !SecurePrefs.getApiKey(context).isNullOrBlank()
+        }
 
         // Handle Android back button
         BackHandler {
@@ -249,9 +255,9 @@ class MainActivity : ComponentActivity() {
                 )
             },
             floatingActionButton = {
-                // Only show FAB if we haven't reached the limit of 4 custom options
+                // Only show FAB if API key is set and we haven't reached the limit of 4 custom options
                 val customOptionsCount = customOptions.count { !it.isDefault && !it.isChatGpt }
-                if (customOptionsCount < 4) {
+                if (hasApiKey && customOptionsCount < 4) {
                     FloatingActionButton(
                         onClick = { showAddDialog = true },
                         containerColor = MaterialTheme.colorScheme.primary,
@@ -272,6 +278,55 @@ class MainActivity : ComponentActivity() {
                     .padding(horizontal = 20.dp, vertical = 5.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                // Default and ChatGPT cards (always shown first)
+                item {
+                    DefaultOptionCard(
+                        onEdit = { 
+                            val defaultOption = customOptions.find { it.isDefault }
+                            if (defaultOption != null) {
+                                showEditDialog = defaultOption
+                            }
+                        }
+                    )
+                }
+                
+                item {
+                    ChatGptOptionCard(
+                        onEdit = { 
+                            val chatGptOption = customOptions.find { it.isChatGpt }
+                            if (chatGptOption != null) {
+                                showEditDialog = chatGptOption
+                            }
+                        }
+                    )
+                }
+
+                // Show API key required message if API key is not set
+                if (!hasApiKey) {
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surface
+                            )
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.api_key_required_message),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
+                    }
+                }
+
                 // Custom options list
                 items(customOptions.filter { !it.isDefault && !it.isChatGpt }) { option ->
                     CustomOptionItem(
@@ -284,37 +339,7 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                // Empty state
-                if (customOptions.filter { !it.isDefault && !it.isChatGpt }.isEmpty()) {
-                    item {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant
-                            )
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(32.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(16.dp)
-                            ) {
-                                Text(
-                                    text = "No Custom Options",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(
-                                    text = "Tap the + button to add your first custom option",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    textAlign = TextAlign.Center
-                                )
-                            }
-                        }
-                    }
-                }
+
             }
         }
 
@@ -372,7 +397,11 @@ class MainActivity : ComponentActivity() {
         // Edit Dialog
         showEditDialog?.let { option ->
             var editName by remember { mutableStateOf(option.name) }
-            var editPrompt by remember { mutableStateOf(option.prompt) }
+            var editPrompt by remember { 
+                mutableStateOf(
+                    if (option.isDefault) "" else option.prompt
+                ) 
+            }
 
             AlertDialog(
                 onDismissRequest = { showEditDialog = null },
@@ -385,7 +414,8 @@ class MainActivity : ComponentActivity() {
                             value = editName,
                             onValueChange = { editName = it },
                             label = { Text(stringResource(R.string.option_name)) },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !option.isDefault && !option.isChatGpt
                         )
                         OutlinedTextField(
                             value = editPrompt,
@@ -536,6 +566,68 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.wrapContentWidth()
                 ) {
                     Text(stringResource(R.string.manage_custom_options))
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun DefaultOptionCard(onEdit: () -> Unit) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Default",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onEdit) {
+                        Text(stringResource(R.string.edit))
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun ChatGptOptionCard(onEdit: () -> Unit) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "ChatGPT",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onEdit) {
+                        Text(stringResource(R.string.edit))
+                    }
                 }
             }
         }
