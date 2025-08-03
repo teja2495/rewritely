@@ -15,15 +15,20 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 
 class MainActivity : ComponentActivity() {
 
@@ -45,6 +50,15 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Refresh states when returning from settings
+        updateStates(this) { apiKeyExists, accessibility, overlay ->
+            // Update the UI state if needed
+            // Note: Since we're using Compose, the UI will be updated through LaunchedEffect
+        }
+    }
+
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     fun MainScreen() {
@@ -60,6 +74,18 @@ class MainActivity : ComponentActivity() {
                 hasApiKey = apiKeyExists
                 isAccessibilityEnabled = accessibility
                 hasOverlayPermission = overlay
+            }
+        }
+        
+        // Refresh states when activity resumes (e.g., returning from settings)
+        val lifecycleOwner = LocalLifecycleOwner.current
+        LaunchedEffect(lifecycleOwner) {
+            lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                updateStates(context) { apiKeyExists, accessibility, overlay ->
+                    hasApiKey = apiKeyExists
+                    isAccessibilityEnabled = accessibility
+                    hasOverlayPermission = overlay
+                }
             }
         }
 
