@@ -16,6 +16,10 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:mimeType="*/*" />
         </intent>
+        <package android:name="com.openai.chatgpt" />
+        <package android:name="com.openai.chatgpt.android" />
+        <package android:name="com.openai.chatgpt.mobile" />
+        <package android:name="com.openai.chatgpt.app" />
     </queries>
 
     <application

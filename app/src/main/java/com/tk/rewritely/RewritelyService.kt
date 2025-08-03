@@ -5,7 +5,11 @@ import android.accessibilityservice.AccessibilityServiceInfo
 import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
 import android.graphics.Point
@@ -45,6 +49,10 @@ class RewritelyService : AccessibilityService() {
     // Prevent multiple API calls at once
     @Volatile private var isFetchInProgress = false
 
+    // Variables for ChatGPT auto-paste functionality
+    private var textToPaste: String? = null
+    private var shouldPasteInChatGpt = false
+
     // Icon position & drag state
     private var lastX = 0
     private var lastY = 0
@@ -77,6 +85,17 @@ class RewritelyService : AccessibilityService() {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
                 clearIgnoredIfAppChanged(event.packageName?.toString())
                 handleFocusChange(findFocus(AccessibilityNodeInfo.FOCUS_INPUT))
+                
+                // Check if ChatGPT app opened and we need to paste text
+                if (shouldPasteInChatGpt && textToPaste != null) {
+                    val packageName = event.packageName?.toString()
+                    if (packageName?.contains("openai") == true || packageName?.contains("chatgpt") == true) {
+                        scope.launch {
+                            delay(1000) // Wait for app to fully load
+                            pasteTextInChatGpt()
+                        }
+                    }
+                }
             }
             AccessibilityEvent.TYPE_VIEW_FOCUSED -> handleFocusChange(event.source)
             AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED ->
@@ -317,6 +336,10 @@ class RewritelyService : AccessibilityService() {
                     fetchNewText("Just fix the grammar: ")
                     true
                 }
+                R.id.action_chatgpt -> {
+                    copyTextAndOpenChatGPT()
+                    true
+                }
                 R.id.action_undo -> {
                     setInputFieldText(originalText)
                     true
@@ -411,6 +434,138 @@ class RewritelyService : AccessibilityService() {
             ignoredFields.removeAll { it.first == pkg }
             lastPackage = pkg
         }
+    }
+
+    private fun copyTextAndOpenChatGPT() {
+        val text = getInputFieldText()
+        if (text.isBlank()) {
+            Toast.makeText(this, "No text to copy.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        // Append the instruction text to the original text
+        val textWithInstruction = "Rewrite in common language, NEVER use emdashes: $text"
+
+        // Copy text to clipboard
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = ClipData.newPlainText("Text for ChatGPT", textWithInstruction)
+        clipboard.setPrimaryClip(clip)
+
+        // Set up auto-paste functionality
+        textToPaste = textWithInstruction
+        shouldPasteInChatGpt = true
+
+        // Try to open ChatGPT app
+        try {
+            // Try multiple possible package names for ChatGPT
+            val chatGptPackages = listOf(
+                "com.openai.chatgpt",
+                "com.openai.chatgpt.android",
+                "com.openai.chatgpt.mobile",
+                "com.openai.chatgpt.app"
+            )
+            
+            var appFound = false
+            for (packageName in chatGptPackages) {
+                val intent = packageManager.getLaunchIntentForPackage(packageName)
+                if (intent != null) {
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    startActivity(intent)
+                    Toast.makeText(this, "Text copied! Opening ChatGPT...", Toast.LENGTH_SHORT).show()
+                    appFound = true
+                    break
+                }
+            }
+            
+            if (!appFound) {
+                // If ChatGPT app is not found, try to open Play Store
+                val playStoreIntent = Intent(Intent.ACTION_VIEW).apply {
+                    data = android.net.Uri.parse("market://details?id=com.openai.chatgpt")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                startActivity(playStoreIntent)
+                Toast.makeText(this, "Text copied! ChatGPT app not found, opening Play Store.", Toast.LENGTH_LONG).show()
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "Text copied to clipboard. Please open ChatGPT manually.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun pasteTextInChatGpt() {
+        try {
+            // Find the input field in ChatGPT app
+            val rootNode = rootInActiveWindow ?: return
+            val inputField = findChatGptInputField(rootNode)
+            
+            if (inputField != null) {
+                // Paste the text into the input field
+                val bundle = Bundle()
+                bundle.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, textToPaste)
+                inputField.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, bundle)
+                
+                Toast.makeText(this, "Text pasted in ChatGPT!", Toast.LENGTH_SHORT).show()
+                
+                // Reset the auto-paste state
+                textToPaste = null
+                shouldPasteInChatGpt = false
+            } else {
+                // Reset after a few attempts
+                scope.launch {
+                    delay(3000)
+                    if (shouldPasteInChatGpt) {
+                        shouldPasteInChatGpt = false
+                        textToPaste = null
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            shouldPasteInChatGpt = false
+            textToPaste = null
+        }
+    }
+
+    private fun findChatGptInputField(rootNode: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        // Common input field identifiers in ChatGPT app
+        val inputFieldIds = listOf(
+            "com.openai.chatgpt:id/input_field",
+            "com.openai.chatgpt:id/message_input",
+            "com.openai.chatgpt:id/chat_input",
+            "com.openai.chatgpt:id/edit_text",
+            "input_field",
+            "message_input",
+            "chat_input",
+            "edit_text"
+        )
+        
+        // Search for input fields by ID
+        for (id in inputFieldIds) {
+            val nodes = rootNode.findAccessibilityNodeInfosByViewId(id)
+            if (nodes.isNotEmpty()) {
+                val inputField = nodes.first()
+                if (inputField.isEditable) {
+                    return inputField
+                }
+            }
+        }
+        
+        // Search for any editable text field
+        return findEditableTextField(rootNode)
+    }
+
+    private fun findEditableTextField(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        if (node.isEditable && node.className == "android.widget.EditText") {
+            return node
+        }
+        
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            val result = findEditableTextField(child)
+            if (result != null) {
+                return result
+            }
+        }
+        
+        return null
     }
 
     private fun cleanup() {

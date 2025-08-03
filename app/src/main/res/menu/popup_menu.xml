@@ -4,6 +4,9 @@
         android:id="@+id/action_fix_grammar"
         android:title="Fix Grammar" />
     <item
+        android:id="@+id/action_chatgpt"
+        android:title="ChatGPT" />
+    <item
         android:id="@+id/action_undo"
         android:title="Undo" />
     <item
