@@ -133,4 +133,28 @@ object SecurePrefs {
     fun resetToDefaults(context: Context) {
         saveCustomOptions(context, getDefaultOptions())
     }
+
+    fun resetDefaultOption(context: Context) {
+        val currentOptions = getCustomOptions(context).toMutableList()
+        val defaultOption = currentOptions.find { it.isDefault }
+        if (defaultOption != null) {
+            val index = currentOptions.indexOf(defaultOption)
+            currentOptions[index] = defaultOption.copy(
+                prompt = "Rewrite in common language, NEVER use Em Dashes: "
+            )
+            saveCustomOptions(context, currentOptions)
+        }
+    }
+
+    fun resetChatGptOption(context: Context) {
+        val currentOptions = getCustomOptions(context).toMutableList()
+        val chatGptOption = currentOptions.find { it.isChatGpt }
+        if (chatGptOption != null) {
+            val index = currentOptions.indexOf(chatGptOption)
+            currentOptions[index] = chatGptOption.copy(
+                prompt = "Rewrite in common language, NEVER use emdashes: "
+            )
+            saveCustomOptions(context, currentOptions)
+        }
+    }
 }

@@ -242,7 +242,11 @@ class RewritelyService : AccessibilityService() {
                                 // Check if API key is set to determine behavior
                                 val hasApiKey = !SecurePrefs.getApiKey(this).isNullOrBlank()
                                 if (hasApiKey) {
-                                    fetchNewText("Rewrite in common language, NEVER use Em Dashes: ")
+                                    // Get the custom prompt from the Default option
+                                    val customOptions = SecurePrefs.getCustomOptions(this)
+                                    val defaultOption = customOptions.find { it.isDefault }
+                                    val prompt = defaultOption?.prompt ?: "Rewrite in common language, NEVER use Em Dashes: "
+                                    fetchNewText(prompt)
                                 } else {
                                     // Use ChatGPT action when API key is not set
                                     copyTextAndOpenChatGPT()
@@ -446,8 +450,13 @@ class RewritelyService : AccessibilityService() {
             return
         }
 
+        // Get the custom prompt from the ChatGPT option
+        val customOptions = SecurePrefs.getCustomOptions(this)
+        val chatGptOption = customOptions.find { it.isChatGpt }
+        val prompt = chatGptOption?.prompt ?: "Rewrite in common language, NEVER use emdashes: "
+        
         // Append the instruction text to the original text
-        val textWithInstruction = "Rewrite in common language, NEVER use emdashes: $text"
+        val textWithInstruction = "$prompt$text"
 
         // Copy text to clipboard
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager

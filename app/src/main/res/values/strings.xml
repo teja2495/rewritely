@@ -27,4 +27,5 @@
     <string name="manage_custom_options">Manage</string>
     <string name="max_custom_options_reached">Maximum 4 custom options allowed</string>
     <string name="api_key_required_message">You cannot add custom options until you set up your OpenAI API key.</string>
+    <string name="reset_to_default">Reset</string>
 </resources>

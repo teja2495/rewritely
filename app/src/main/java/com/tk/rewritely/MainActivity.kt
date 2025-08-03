@@ -286,6 +286,11 @@ class MainActivity : ComponentActivity() {
                             if (defaultOption != null) {
                                 showEditDialog = defaultOption
                             }
+                        },
+                        onReset = {
+                            SecurePrefs.resetDefaultOption(context)
+                            customOptions = SecurePrefs.getCustomOptions(context)
+                            Toast.makeText(context, "Default option reset to default prompt.", Toast.LENGTH_SHORT).show()
                         }
                     )
                 }
@@ -297,6 +302,11 @@ class MainActivity : ComponentActivity() {
                             if (chatGptOption != null) {
                                 showEditDialog = chatGptOption
                             }
+                        },
+                        onReset = {
+                            SecurePrefs.resetChatGptOption(context)
+                            customOptions = SecurePrefs.getCustomOptions(context)
+                            Toast.makeText(context, "ChatGPT option reset to default prompt.", Toast.LENGTH_SHORT).show()
                         }
                     )
                 }
@@ -572,7 +582,7 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    fun DefaultOptionCard(onEdit: () -> Unit) {
+    fun DefaultOptionCard(onEdit: () -> Unit, onReset: () -> Unit) {
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
@@ -594,6 +604,9 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
                 ) {
+                    TextButton(onClick = onReset) {
+                        Text(stringResource(R.string.reset_to_default))
+                    }
                     TextButton(onClick = onEdit) {
                         Text(stringResource(R.string.edit))
                     }
@@ -603,7 +616,7 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    fun ChatGptOptionCard(onEdit: () -> Unit) {
+    fun ChatGptOptionCard(onEdit: () -> Unit, onReset: () -> Unit) {
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
@@ -625,6 +638,9 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
                 ) {
+                    TextButton(onClick = onReset) {
+                        Text(stringResource(R.string.reset_to_default))
+                    }
                     TextButton(onClick = onEdit) {
                         Text(stringResource(R.string.edit))
                     }
