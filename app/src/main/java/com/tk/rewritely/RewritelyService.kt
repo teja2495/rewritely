@@ -36,7 +36,6 @@ class RewritelyService : AccessibilityService() {
     private var optionsIcon: ImageView? = null
 
     private var originalText: String = ""
-    private var newText: String = ""
 
     private var lastPackage: String? = null
 
@@ -302,7 +301,6 @@ class RewritelyService : AccessibilityService() {
                     val result = res.body()?.choices?.firstOrNull()?.message?.content?.trim()
                     if (res.isSuccessful && !result.isNullOrBlank()) {
                         setInputFieldText(result)
-                        newText = result
                     } else {
                         Toast.makeText(applicationContext, "API Error", Toast.LENGTH_LONG).show()
                     }
@@ -320,37 +318,29 @@ class RewritelyService : AccessibilityService() {
 
     private fun showOptionsMenu(anchor: View) {
         val popup = PopupMenu(this, anchor)
-        popup.menuInflater.inflate(R.menu.popup_menu, popup.menu)
-
-        popup.menu.findItem(R.id.action_undo)?.isVisible =
-                false // getInputFieldText() == newText && originalText.isNotBlank()
-        popup.menu.findItem(R.id.action_redo)?.isVisible =
-                getInputFieldText() == originalText && newText.isNotBlank()
+        
+        // Get custom options from SecurePrefs
+        val customOptions = SecurePrefs.getCustomOptions(this)
+        
+        // Add all options to the menu except the default option (since sparkle icon handles it)
+        customOptions.filter { !it.isDefault }.forEach { option ->
+            val menuItem = popup.menu.add(option.name)
+            menuItem.setOnMenuItemClickListener {
+                when {
+                    option.isChatGpt -> {
+                        copyTextAndOpenChatGPT()
+                        true
+                    }
+                    else -> {
+                        fetchNewText(option.prompt)
+                        true
+                    }
+                }
+            }
+        }
 
         isOptionsMenuShowing = true
         popup.setOnDismissListener { isOptionsMenuShowing = false }
-
-        popup.setOnMenuItemClickListener { item ->
-            when (item.itemId) {
-                R.id.action_fix_grammar -> {
-                    fetchNewText("Just fix the grammar: ")
-                    true
-                }
-                R.id.action_chatgpt -> {
-                    copyTextAndOpenChatGPT()
-                    true
-                }
-                R.id.action_undo -> {
-                    setInputFieldText(originalText)
-                    true
-                }
-                R.id.action_redo -> {
-                    setInputFieldText(newText)
-                    true
-                }
-                else -> false
-            }
-        }
         popup.show()
     }
 

@@ -13,8 +13,14 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.*
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
@@ -68,6 +74,7 @@ class MainActivity : ComponentActivity() {
         var hasApiKey by remember { mutableStateOf(false) }
         var isAccessibilityEnabled by remember { mutableStateOf(false) }
         var hasOverlayPermission by remember { mutableStateOf(false) }
+        var showCustomOptionsScreen by remember { mutableStateOf(false) }
 
         // Update states when the screen is displayed
         LaunchedEffect(Unit) {
@@ -90,88 +97,324 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        if (showCustomOptionsScreen) {
+            CustomOptionsScreen(
+                onBackPressed = { showCustomOptionsScreen = false }
+            )
+        } else {
+            Scaffold(
+                topBar = {
+                    TopAppBar(
+                        title = { 
+                            Text(
+                                text = "Rewritely",
+                                modifier = Modifier.padding(start = 16.dp),
+                                fontWeight = FontWeight.Bold
+                            ) 
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            titleContentColor = MaterialTheme.colorScheme.onSurface
+                        )
+                    )
+                }
+            ) { paddingValues ->
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues)
+                        .padding(horizontal = 20.dp, vertical = 5.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // API Key Section
+                    item {
+                        ApiKeySection(
+                            apiKey = apiKey,
+                            onApiKeyChange = { apiKey = it },
+                            hasApiKey = hasApiKey,
+                            onSaveKey = {
+                                if (apiKey.trim().length == 164 && apiKey.startsWith("sk-proj-")) {
+                                    SecurePrefs.saveApiKey(context, apiKey)
+                                    apiKey = ""
+                                    hasApiKey = true
+                                    Toast.makeText(context, "API Key saved securely.", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    Toast.makeText(context, "Please enter a valid OpenAI API Key (should start with 'sk-proj').", Toast.LENGTH_LONG).show()
+                                }
+                            },
+                            onResetKey = {
+                                SecurePrefs.clearApiKey(context)
+                                hasApiKey = false
+                                Toast.makeText(context, "API Key reset.", Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                    }
+
+                    // Divider
+                    item {
+                        HorizontalDivider()
+                    }
+
+                    // Custom Options Section - only show when all permissions are granted
+                    if (isAccessibilityEnabled && hasOverlayPermission) {
+                        item {
+                            CustomOptionsSection(
+                                onManageCustomOptions = { showCustomOptionsScreen = true }
+                            )
+                        }
+
+                        // Divider
+                        item {
+                            HorizontalDivider()
+                        }
+                    }
+
+                    // Permissions Section (only show if any permission is not granted)
+                    if (!isAccessibilityEnabled || !hasOverlayPermission) {
+                        item {
+                            PermissionsSection(
+                                isAccessibilityEnabled = isAccessibilityEnabled,
+                                hasOverlayPermission = hasOverlayPermission,
+                                onGrantAccessibility = {
+                                    try {
+                                        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                                        context.startActivity(intent)
+                                        Toast.makeText(context, "Please find and enable 'Input Assistant Service'.", Toast.LENGTH_LONG).show()
+                                    } catch (e: Exception) {
+                                        Log.e(TAG, "Could not open Accessibility Settings.", e)
+                                        Toast.makeText(context, "Could not open Accessibility Settings.", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                onGrantOverlay = {
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                                        try {
+                                            val intent = Intent(
+                                                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                                Uri.parse("package:${context.packageName}")
+                                            )
+                                            context.startActivity(intent)
+                                            Toast.makeText(context, "Please grant the 'Draw over other apps' permission.", Toast.LENGTH_LONG).show()
+                                        } catch (e: Exception) {
+                                            Log.e(TAG, "Could not open Overlay Settings.", e)
+                                            Toast.makeText(context, "Could not open Overlay Settings.", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @OptIn(ExperimentalMaterial3Api::class)
+    @Composable
+    fun CustomOptionsScreen(onBackPressed: () -> Unit) {
+        val context = LocalContext.current
+        var customOptions by remember { mutableStateOf(SecurePrefs.getCustomOptions(context)) }
+        var showAddDialog by remember { mutableStateOf(false) }
+        var showEditDialog by remember { mutableStateOf<CustomOption?>(null) }
+        var newOptionName by remember { mutableStateOf("") }
+        var newOptionPrompt by remember { mutableStateOf("") }
+
+        // Handle Android back button
+        BackHandler {
+            onBackPressed()
+        }
+
         Scaffold(
             topBar = {
                 TopAppBar(
                     title = { 
                         Text(
-                            text = "Rewritely",
+                            text = stringResource(R.string.custom_options_title),
                             modifier = Modifier.padding(start = 16.dp),
                             fontWeight = FontWeight.Bold
                         ) 
                     },
+                    navigationIcon = {
+                        IconButton(onClick = onBackPressed) {
+                            Icon(
+                                imageVector = androidx.compose.material.icons.Icons.Default.ArrowBack,
+                                contentDescription = "Back"
+                            )
+                        }
+                    },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.surface,
-                        titleContentColor = MaterialTheme.colorScheme.onSurface
+                        titleContentColor = MaterialTheme.colorScheme.onSurface,
+                        navigationIconContentColor = MaterialTheme.colorScheme.onSurface
                     )
                 )
+            },
+            floatingActionButton = {
+                // Only show FAB if we haven't reached the limit of 4 custom options
+                val customOptionsCount = customOptions.count { !it.isDefault && !it.isChatGpt }
+                if (customOptionsCount < 4) {
+                    FloatingActionButton(
+                        onClick = { showAddDialog = true },
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(bottom = 32.dp, end = 20.dp)
+                    ) {
+                        Icon(
+                            imageVector = androidx.compose.material.icons.Icons.Default.Add,
+                            contentDescription = "Add Option"
+                        )
+                    }
+                }
             }
         ) { paddingValues ->
-            Column(
+            LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
                     .padding(horizontal = 20.dp, vertical = 5.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // API Key Section
-                ApiKeySection(
-                    apiKey = apiKey,
-                    onApiKeyChange = { apiKey = it },
-                    hasApiKey = hasApiKey,
-                    onSaveKey = {
-                        if (apiKey.trim().length == 164 && apiKey.startsWith("sk-proj-")) {
-                            SecurePrefs.saveApiKey(context, apiKey)
-                            apiKey = ""
-                            hasApiKey = true
-                            Toast.makeText(context, "API Key saved securely.", Toast.LENGTH_SHORT).show()
-                        } else {
-                            Toast.makeText(context, "Please enter a valid OpenAI API Key (should start with 'sk-proj').", Toast.LENGTH_LONG).show()
-                        }
-                    },
-                    onResetKey = {
-                        SecurePrefs.clearApiKey(context)
-                        hasApiKey = false
-                        Toast.makeText(context, "API Key reset.", Toast.LENGTH_SHORT).show()
-                    }
-                )
-
-                // Divider
-                HorizontalDivider()
-
-                // Permissions Section (only show if any permission is not granted)
-                if (!isAccessibilityEnabled || !hasOverlayPermission) {
-                    PermissionsSection(
-                        isAccessibilityEnabled = isAccessibilityEnabled,
-                        hasOverlayPermission = hasOverlayPermission,
-                        onGrantAccessibility = {
-                            try {
-                                val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                                context.startActivity(intent)
-                                Toast.makeText(context, "Please find and enable 'Input Assistant Service'.", Toast.LENGTH_LONG).show()
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Could not open Accessibility Settings.", e)
-                                Toast.makeText(context, "Could not open Accessibility Settings.", Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                        onGrantOverlay = {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                                try {
-                                    val intent = Intent(
-                                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                        Uri.parse("package:${context.packageName}")
-                                    )
-                                    context.startActivity(intent)
-                                    Toast.makeText(context, "Please grant the 'Draw over other apps' permission.", Toast.LENGTH_LONG).show()
-                                } catch (e: Exception) {
-                                    Log.e(TAG, "Could not open Overlay Settings.", e)
-                                    Toast.makeText(context, "Could not open Overlay Settings.", Toast.LENGTH_SHORT).show()
-                                }
-                            }
+                // Custom options list
+                items(customOptions.filter { !it.isDefault && !it.isChatGpt }) { option ->
+                    CustomOptionItem(
+                        option = option,
+                        onEdit = { showEditDialog = option },
+                        onDelete = {
+                            SecurePrefs.deleteCustomOption(context, option.id)
+                            customOptions = SecurePrefs.getCustomOptions(context)
                         }
                     )
                 }
+
+                // Empty state
+                if (customOptions.filter { !it.isDefault && !it.isChatGpt }.isEmpty()) {
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant
+                            )
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(32.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                Text(
+                                    text = "No Custom Options",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = "Tap the + button to add your first custom option",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
+                    }
+                }
             }
+        }
+
+        // Add Dialog
+        if (showAddDialog) {
+            AlertDialog(
+                onDismissRequest = { showAddDialog = false },
+                title = { Text(stringResource(R.string.add_new_option)) },
+                text = {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = newOptionName,
+                            onValueChange = { newOptionName = it },
+                            label = { Text(stringResource(R.string.option_name)) },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = newOptionPrompt,
+                            onValueChange = { newOptionPrompt = it },
+                            label = { Text(stringResource(R.string.option_prompt)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            minLines = 3
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            if (newOptionName.isNotBlank() && newOptionPrompt.isNotBlank()) {
+                                val newOption = SecurePrefs.addCustomOption(context, newOptionName, newOptionPrompt)
+                                if (newOption != null) {
+                                    customOptions = SecurePrefs.getCustomOptions(context)
+                                    newOptionName = ""
+                                    newOptionPrompt = ""
+                                    showAddDialog = false
+                                } else {
+                                    Toast.makeText(context, "Maximum 4 custom options allowed", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    ) {
+                        Text(stringResource(R.string.add))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showAddDialog = false }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                }
+            )
+        }
+
+        // Edit Dialog
+        showEditDialog?.let { option ->
+            var editName by remember { mutableStateOf(option.name) }
+            var editPrompt by remember { mutableStateOf(option.prompt) }
+
+            AlertDialog(
+                onDismissRequest = { showEditDialog = null },
+                title = { Text(stringResource(R.string.edit_option)) },
+                text = {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = editName,
+                            onValueChange = { editName = it },
+                            label = { Text(stringResource(R.string.option_name)) },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = editPrompt,
+                            onValueChange = { editPrompt = it },
+                            label = { Text(stringResource(R.string.option_prompt)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            minLines = 3
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            if (editName.isNotBlank() && editPrompt.isNotBlank()) {
+                                SecurePrefs.updateCustomOption(context, option.id, editName, editPrompt)
+                                customOptions = SecurePrefs.getCustomOptions(context)
+                                showEditDialog = null
+                            }
+                        }
+                    ) {
+                        Text(stringResource(R.string.save))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showEditDialog = null }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                }
+            )
         }
     }
 
@@ -253,6 +496,88 @@ class MainActivity : ComponentActivity() {
                                 style = MaterialTheme.typography.bodyMedium
                             )
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun CustomOptionsSection(onManageCustomOptions: () -> Unit) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.custom_options_title),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+
+                Text(
+                    text = stringResource(R.string.custom_options_description),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Button(
+                    onClick = onManageCustomOptions,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary
+                    ),
+                    modifier = Modifier.wrapContentWidth()
+                ) {
+                    Text(stringResource(R.string.manage_custom_options))
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun CustomOptionItem(
+        option: CustomOption,
+        onEdit: () -> Unit,
+        onDelete: () -> Unit
+    ) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = option.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "Prompt: ${option.prompt}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onEdit) {
+                        Text(stringResource(R.string.edit))
+                    }
+                    TextButton(onClick = onDelete) {
+                        Text(stringResource(R.string.delete))
                     }
                 }
             }

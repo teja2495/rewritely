@@ -1,11 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Rewritely</string>
     <string name="accessibility_service_label">Rewritely</string>
-    <string name="accessibility_service_description">This service finds text fields on your device and shows a floating icon. When you tap it, it rewrites the text in that field. The app won’t work without this service, so if you don’t want to enable it, you can uninstall the app. The text it detects is only used to rewrite and nothing more.</string>
+    <string name="accessibility_service_description">This service finds text fields on your device and shows a floating icon. When you tap it, it rewrites the text in that field. The app won\'t work without this service, so if you don\'t want to enable it, you can uninstall the app. The text it detects is only used to rewrite and nothing more.</string>
     <string name="foreground_notification_title">Input Assistant Active</string>
     <string name="foreground_notification_text">Monitoring input fields.</string>
     <string name="network_error">Network Error</string>
     <string name="accessibility_permission">Accessibility Service:</string>
     <string name="overlay_permission">Appear On Top:</string>
     <string name="permissions_info">The app requires these permissions to function correctly.</string>
+    
+    <!-- Custom Options -->
+    <string name="custom_options_title">Custom Options</string>
+    <string name="custom_options_description">Create and manage custom options that will appear in the 3-dot menu.</string>
+    <string name="add_new_option">Add New Option</string>
+    <string name="reset_to_defaults">Reset to Defaults</string>
+    <string name="option_name">Option Name</string>
+    <string name="option_prompt">Option Prompt</string>
+    <string name="edit_option">Edit Option</string>
+    <string name="add">Add</string>
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+    <string name="edit">Edit</string>
+    <string name="delete">Delete</string>
+    <string name="reset_to_default_options">Reset to default options</string>
+    <string name="manage_custom_options">Manage</string>
+    <string name="max_custom_options_reached">Maximum 4 custom options allowed</string>
 </resources>
