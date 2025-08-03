@@ -8,153 +8,353 @@ import android.os.Bundle
 import android.provider.Settings
 import android.text.TextUtils
 import android.util.Log
-import android.widget.Button
-import android.widget.EditText
-import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.isVisible
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.material3.ExperimentalMaterial3Api
 
-class MainActivity : AppCompatActivity() {
-
-    // View declarations
-    private lateinit var editTextApiKey: EditText
-    private lateinit var textViewApiKeyStatus: TextView
-    private lateinit var buttonSaveKey: Button
-    private lateinit var buttonResetKey: Button
-    private lateinit var textViewAccessibilityStatus: TextView
-    private lateinit var buttonGrantAccessibility: Button
-    private lateinit var textViewOverlayStatus: TextView
-    private lateinit var buttonGrantOverlay: Button
-    private lateinit var buttonSelectApps: Button
+class MainActivity : ComponentActivity() {
 
     private val TAG = "MainActivity"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
-
-        // Initialize views
-        editTextApiKey = findViewById(R.id.editTextApiKey)
-        textViewApiKeyStatus = findViewById(R.id.textViewApiKeyStatus)
-        buttonSaveKey = findViewById(R.id.buttonSaveKey)
-        buttonResetKey = findViewById(R.id.buttonResetKey)
-        textViewAccessibilityStatus = findViewById(R.id.textViewAccessibilityStatus)
-        buttonGrantAccessibility = findViewById(R.id.buttonGrantAccessibility)
-        textViewOverlayStatus = findViewById(R.id.textViewOverlayStatus)
-        buttonGrantOverlay = findViewById(R.id.buttonGrantOverlay)
-
-        // Setup listeners
-        setupApiKeyListeners()
-        setupPermissionButtonListeners()
-    }
-
-    override fun onResume() {
-        super.onResume()
-        // Update status and UI visibility when the activity resumes
-        Log.d(TAG, "onResume: Updating UI status...")
-        updateApiKeyStatus()
-        updatePermissionStatusUI()
-        updateApiKeyUIElementsVisibility()  // NEW: Update visibility of API key UI elements
-    }
-
-    private fun setupApiKeyListeners() {
-        buttonSaveKey.setOnClickListener {
-            val apiKey = editTextApiKey.text.toString().trim()
-            if (apiKey.trim().length === 164 && apiKey.startsWith("sk-proj-")) {
-                SecurePrefs.saveApiKey(this, apiKey)
-                editTextApiKey.text.clear()
-                updateApiKeyStatus()
-                updateApiKeyUIElementsVisibility() // NEW: Update visibility after saving
-                Toast.makeText(this, "API Key saved securely.", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(this, "Please enter a valid OpenAI API Key (should start with 'sk-proj').", Toast.LENGTH_LONG).show()
-            }
-        }
-
-        buttonResetKey.setOnClickListener {
-            SecurePrefs.clearApiKey(this)
-            updateApiKeyStatus()
-            updateApiKeyUIElementsVisibility() // NEW: Update visibility after reset
-            Toast.makeText(this, "API Key reset.", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun setupPermissionButtonListeners() {
-        buttonGrantAccessibility.setOnClickListener {
-            Log.d(TAG, "Accessibility grant button clicked. Opening settings.")
-            try {
-                val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                startActivity(intent)
-                Toast.makeText(this, "Please find and enable 'Input Assistant Service'.", Toast.LENGTH_LONG).show()
-            } catch (e: Exception) {
-                Log.e(TAG, "Could not open Accessibility Settings.", e)
-                Toast.makeText(this, "Could not open Accessibility Settings.", Toast.LENGTH_SHORT).show()
-            }
-        }
-
-        buttonGrantOverlay.setOnClickListener {
-            Log.d(TAG, "Overlay grant button clicked. Opening settings.")
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                try {
-                    val intent = Intent(
-                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                        Uri.parse("package:$packageName")
-                    )
-                    startActivity(intent)
-                    Toast.makeText(this, "Please grant the 'Draw over other apps' permission.", Toast.LENGTH_LONG).show()
-                } catch (e: Exception) {
-                    Log.e(TAG, "Could not open Overlay Settings.", e)
-                    Toast.makeText(this, "Could not open Overlay Settings.", Toast.LENGTH_SHORT).show()
+        setContent {
+            MaterialTheme(
+                colorScheme = darkColorScheme()
+            ) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    MainScreen()
                 }
             }
         }
     }
 
-    private fun updateApiKeyStatus() {
-        val storedKey = SecurePrefs.getApiKey(this)
-        val statusText = if (storedKey != null && storedKey.length > 4) {
-            getString(R.string.api_key_status_masked, storedKey.takeLast(4))
-        } else if (storedKey != null) {
-            "Set (Invalid length)"
-        } else {
-            getString(R.string.api_key_status_not_set)
+    @OptIn(ExperimentalMaterial3Api::class)
+    @Composable
+    fun MainScreen() {
+        val context = LocalContext.current
+        var apiKey by remember { mutableStateOf("") }
+        var hasApiKey by remember { mutableStateOf(false) }
+        var isAccessibilityEnabled by remember { mutableStateOf(false) }
+        var hasOverlayPermission by remember { mutableStateOf(false) }
+
+        // Update states when the screen is displayed
+        LaunchedEffect(Unit) {
+            updateStates(context) { apiKeyExists, accessibility, overlay ->
+                hasApiKey = apiKeyExists
+                isAccessibilityEnabled = accessibility
+                hasOverlayPermission = overlay
+            }
         }
-        textViewApiKeyStatus.text = statusText
+
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("Rewritely") },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        titleContentColor = MaterialTheme.colorScheme.onSurface
+                    )
+                )
+            }
+        ) { paddingValues ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // API Key Section
+                ApiKeySection(
+                    apiKey = apiKey,
+                    onApiKeyChange = { apiKey = it },
+                    hasApiKey = hasApiKey,
+                    onSaveKey = {
+                        if (apiKey.trim().length == 164 && apiKey.startsWith("sk-proj-")) {
+                            SecurePrefs.saveApiKey(context, apiKey)
+                            apiKey = ""
+                            hasApiKey = true
+                            Toast.makeText(context, "API Key saved securely.", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(context, "Please enter a valid OpenAI API Key (should start with 'sk-proj').", Toast.LENGTH_LONG).show()
+                        }
+                    },
+                    onResetKey = {
+                        SecurePrefs.clearApiKey(context)
+                        hasApiKey = false
+                        Toast.makeText(context, "API Key reset.", Toast.LENGTH_SHORT).show()
+                    }
+                )
+
+                // Divider
+                HorizontalDivider()
+
+                // Permissions Section
+                PermissionsSection(
+                    isAccessibilityEnabled = isAccessibilityEnabled,
+                    hasOverlayPermission = hasOverlayPermission,
+                    onGrantAccessibility = {
+                        try {
+                            val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                            context.startActivity(intent)
+                            Toast.makeText(context, "Please find and enable 'Input Assistant Service'.", Toast.LENGTH_LONG).show()
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Could not open Accessibility Settings.", e)
+                            Toast.makeText(context, "Could not open Accessibility Settings.", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    onGrantOverlay = {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            try {
+                                val intent = Intent(
+                                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                    Uri.parse("package:${context.packageName}")
+                                )
+                                context.startActivity(intent)
+                                Toast.makeText(context, "Please grant the 'Draw over other apps' permission.", Toast.LENGTH_LONG).show()
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Could not open Overlay Settings.", e)
+                                Toast.makeText(context, "Could not open Overlay Settings.", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                )
+            }
+        }
     }
 
-    private fun updatePermissionStatusUI() {
-        val isAccessibilityEnabled = isAccessibilityServiceEnabled()
-        Log.d(TAG, "Accessibility Service Enabled Check Result: $isAccessibilityEnabled")
-        textViewAccessibilityStatus.text = if (isAccessibilityEnabled) {
-            getString(R.string.permission_granted)
-        } else {
-            getString(R.string.permission_not_granted)
-        }
-        buttonGrantAccessibility.isVisible = !isAccessibilityEnabled
+    @Composable
+    fun ApiKeySection(
+        apiKey: String,
+        onApiKeyChange: (String) -> Unit,
+        hasApiKey: Boolean,
+        onSaveKey: () -> Unit,
+        onResetKey: () -> Unit
+    ) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "OpenAI API Key",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                
+                // API Key Status Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Status:",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = if (hasApiKey) {
+                            val storedKey = SecurePrefs.getApiKey(LocalContext.current)
+                            if (storedKey != null && storedKey.length > 4) {
+                                stringResource(R.string.api_key_status_masked, storedKey.takeLast(4))
+                            } else {
+                                "Set (Invalid length)"
+                            }
+                        } else {
+                            stringResource(R.string.api_key_status_not_set)
+                        },
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = if (hasApiKey) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
 
-        val hasOverlayPerm = hasOverlayPermission()
-        Log.d(TAG, "Overlay Permission Enabled Check Result: $hasOverlayPerm")
-        textViewOverlayStatus.text = if (hasOverlayPerm) {
-            getString(R.string.permission_granted)
-        } else {
-            getString(R.string.permission_not_granted)
+                // API Key Input (only show if no key exists)
+                if (!hasApiKey) {
+                    OutlinedTextField(
+                        value = apiKey,
+                        onValueChange = onApiKeyChange,
+                        label = { Text("Enter your OpenAI API Key (sk-...)") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                            focusedLabelColor = MaterialTheme.colorScheme.primary,
+                            unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    )
+
+                    Button(
+                        onClick = onSaveKey,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary
+                        )
+                    ) {
+                        Text("Save API Key")
+                    }
+                } else {
+                    Button(
+                        onClick = onResetKey,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary
+                        )
+                    ) {
+                        Text("Reset Key")
+                    }
+                }
+            }
         }
-        buttonGrantOverlay.isVisible = !hasOverlayPerm && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
     }
 
-    /**
-     * NEW FUNCTION: Controls the visibility of API key related UI elements.
-     * Hides the input field and save button when a key exists,
-     * and hides the reset button when no key exists.
-     */
-    private fun updateApiKeyUIElementsVisibility() {
-        val apiKey = SecurePrefs.getApiKey(this)
+    @Composable
+    fun PermissionsSection(
+        isAccessibilityEnabled: Boolean,
+        hasOverlayPermission: Boolean,
+        onGrantAccessibility: () -> Unit,
+        onGrantOverlay: () -> Unit
+    ) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    text = "Permissions",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                
+                Text(
+                    text = stringResource(R.string.permissions_info),
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Start,
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                // Accessibility Permission
+                PermissionRow(
+                    label = stringResource(R.string.accessibility_permission),
+                    isGranted = isAccessibilityEnabled,
+                    onGrant = onGrantAccessibility
+                )
+
+                // Overlay Permission
+                PermissionRow(
+                    label = stringResource(R.string.overlay_permission),
+                    isGranted = hasOverlayPermission,
+                    onGrant = onGrantOverlay
+                )
+            }
+        }
+    }
+
+    @Composable
+    fun PermissionRow(
+        label: String,
+        isGranted: Boolean,
+        onGrant: () -> Unit
+    ) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = if (isGranted) {
+                            stringResource(R.string.permission_granted)
+                        } else {
+                            stringResource(R.string.permission_not_granted)
+                        },
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = if (isGranted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                    )
+                }
+
+                if (!isGranted) {
+                    Button(
+                        onClick = onGrant,
+                        modifier = Modifier.wrapContentWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary
+                        )
+                    ) {
+                        Text(
+                            text = if (label.contains("Accessibility")) {
+                                stringResource(R.string.grant_accessibility_permission)
+                            } else {
+                                stringResource(R.string.grant_overlay_permission)
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private fun updateStates(
+        context: android.content.Context,
+        onStatesUpdated: (Boolean, Boolean, Boolean) -> Unit
+    ) {
+        val apiKey = SecurePrefs.getApiKey(context)
         val hasApiKey = !apiKey.isNullOrBlank()
-
-        editTextApiKey.isVisible = !hasApiKey
-        buttonSaveKey.isVisible = !hasApiKey
-        buttonResetKey.isVisible = hasApiKey
+        val isAccessibilityEnabled = isAccessibilityServiceEnabled()
+        val hasOverlayPermission = hasOverlayPermission()
+        
+        onStatesUpdated(hasApiKey, isAccessibilityEnabled, hasOverlayPermission)
     }
 
     private fun isAccessibilityServiceEnabled(): Boolean {

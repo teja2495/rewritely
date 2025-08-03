@@ -14,6 +14,7 @@ import android.view.*
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
@@ -27,6 +28,8 @@ class RewritelyService : AccessibilityService() {
     private lateinit var windowManager: WindowManager
     private lateinit var params: WindowManager.LayoutParams
     private var floatingIcon: View? = null
+    private var sparkleIcon: ImageView? = null
+    private var optionsIcon: ImageView? = null
 
     private var originalText: String = ""
     private var newText: String = ""
@@ -117,21 +120,44 @@ class RewritelyService : AccessibilityService() {
         if (words <= 2) return hideIcon()
 
         if (floatingIcon == null) {
-            floatingIcon =
-                    LayoutInflater.from(this).inflate(R.layout.floating_icon_layout, null).apply {
-                        val touchListener = iconTouchListener()
-                        findViewById<ImageView>(R.id.floating_icon_image)
-                                .setOnTouchListener(touchListener)
-                        findViewById<ImageView>(R.id.options_icon_image)
-                                .setOnTouchListener(touchListener)
-                        windowManager.addView(
-                                this,
-                                params.apply {
-                                    x = lastX
-                                    y = lastY
-                                }
-                        )
-                    }
+            // Create floating icon programmatically
+            val container = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+            }
+
+            // Create sparkle icon
+            sparkleIcon = ImageView(this).apply {
+                setImageResource(R.drawable.sparkle)
+                layoutParams = LinearLayout.LayoutParams(27.dpToPx(), 27.dpToPx())
+            }
+
+            // Create options icon
+            optionsIcon = ImageView(this).apply {
+                setImageResource(R.drawable.options_icon)
+                layoutParams = LinearLayout.LayoutParams(25.dpToPx(), 25.dpToPx()).apply {
+                    marginStart = 8.dpToPx()
+                }
+            }
+
+            container.addView(sparkleIcon)
+            container.addView(optionsIcon)
+
+            val touchListener = iconTouchListener()
+            sparkleIcon?.setOnTouchListener(touchListener)
+            optionsIcon?.setOnTouchListener(touchListener)
+
+            floatingIcon = container
+            windowManager.addView(
+                container,
+                params.apply {
+                    x = lastX
+                    y = lastY
+                }
+            )
         }
     }
 
@@ -140,6 +166,8 @@ class RewritelyService : AccessibilityService() {
         longPressJob = null
         floatingIcon?.let { runCatching { windowManager.removeView(it) } }
         floatingIcon = null
+        sparkleIcon = null
+        optionsIcon = null
     }
 
     private fun iconTouchListener() =
@@ -184,9 +212,9 @@ class RewritelyService : AccessibilityService() {
                             lastX = params.x
                             lastY = params.y
                         } else if (e.action == MotionEvent.ACTION_UP) {
-                            if (v.id == R.id.options_icon_image) {
+                            if (v == optionsIcon) {
                                 showOptionsMenu(v)
-                            } else {
+                            } else if (v == sparkleIcon) {
                                 fetchNewText("Rewrite in common language, NEVER use Em Dashes: ")
                             }
                         }
@@ -390,5 +418,10 @@ class RewritelyService : AccessibilityService() {
         scope.cancel()
         currentNode?.clear()
         ignoredFields.clear()
+    }
+
+    private fun Int.dpToPx(): Int {
+        val density = resources.displayMetrics.density
+        return (this * density).toInt()
     }
 }
