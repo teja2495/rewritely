@@ -18,14 +18,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    signingConfigs {
-        create("release") {
-            storeFile = file(project.property("MYAPP_UPLOAD_STORE_FILE") as String)
-            storePassword = project.property("MYAPP_UPLOAD_STORE_PASSWORD") as String
-            keyAlias = project.property("MYAPP_UPLOAD_KEY_ALIAS") as String
-            keyPassword = project.property("MYAPP_UPLOAD_KEY_PASSWORD") as String
-        }
-    }
+
 
     buildTypes {
         getByName("release") {
@@ -34,7 +27,6 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {
@@ -73,8 +65,7 @@ dependencies {
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
-    implementation("androidx.constraintlayout:constraintlayout:2.1.4")
-    implementation ("com.google.android.material:material:1.9.0")
+
 }

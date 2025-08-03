@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.provider.Settings
 import android.text.TextUtils
 import android.util.Log
+
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -16,7 +17,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.produceState
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -357,13 +357,10 @@ class MainActivity : ComponentActivity() {
     private fun isAccessibilityServiceEnabled(): Boolean {
         val expectedComponentName = ComponentName(this, RewritelyService::class.java)
         val expectedComponentNameString = expectedComponentName.flattenToString()
-        Log.d(TAG, "Checking Settings.Secure for: $expectedComponentNameString")
-
         val enabledServicesSetting = Settings.Secure.getString(
             contentResolver,
             Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
         )
-        Log.d(TAG, "Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES: $enabledServicesSetting")
 
         if (enabledServicesSetting == null) {
             Log.w(TAG, "Enabled accessibility services setting is null.")
@@ -375,7 +372,7 @@ class MainActivity : ComponentActivity() {
 
         while (colonSplitter.hasNext()) {
             val componentNameString = colonSplitter.next()
-            Log.d(TAG, "Checking against enabled service: $componentNameString")
+
             if (expectedComponentNameString.equals(componentNameString, ignoreCase = true)) {
                 Log.i(TAG, "Accessibility Service IS ENABLED (found in Settings.Secure).")
                 return true

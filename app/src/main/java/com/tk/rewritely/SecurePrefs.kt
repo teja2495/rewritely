@@ -10,7 +10,7 @@ object SecurePrefs {
 
     private const val PREF_FILE_SECURE = "secure_api_prefs"
     private const val KEY_OPENAI_API = "openai_api_key"
-    private const val KEY_SELECTED_APPS = "selected_apps" // New key for selected apps
+
     private const val TAG = "SecurePrefs"
 
     private fun getEncryptedSharedPreferences(context: Context): SharedPreferences? {
@@ -46,25 +46,5 @@ object SecurePrefs {
             ?: Log.e(TAG, "Failed to clear API key, SharedPreferences instance is null")
     }
 
-    fun getSelectedApps(context: Context): Set<String>? {
-        return getEncryptedSharedPreferences(context)?.getStringSet("selected_apps", emptySet())
-    }
 
-    fun addSelectedApp(context: Context, packageName: String) {
-        val prefs = getEncryptedSharedPreferences(context)
-        prefs?.let {
-            val apps = it.getStringSet(KEY_SELECTED_APPS, emptySet())?.toMutableSet() ?: mutableSetOf()
-            apps.add(packageName)
-            it.edit().putStringSet(KEY_SELECTED_APPS, apps).apply()
-        } ?: Log.e(TAG, "Failed to add app, SharedPreferences instance is null")
-    }
-
-    fun removeSelectedApp(context: Context, packageName: String) {
-        val prefs = getEncryptedSharedPreferences(context)
-        prefs?.let {
-            val apps = it.getStringSet(KEY_SELECTED_APPS, emptySet())?.toMutableSet() ?: mutableSetOf()
-            apps.remove(packageName)
-            it.edit().putStringSet(KEY_SELECTED_APPS, apps).apply()
-        } ?: Log.e(TAG, "Failed to remove app, SharedPreferences instance is null")
-    }
 }
