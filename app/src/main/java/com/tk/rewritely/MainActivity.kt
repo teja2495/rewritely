@@ -78,7 +78,7 @@ class MainActivity : ComponentActivity() {
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
-                    .padding(20.dp),
+                    .padding(horizontal = 20.dp, vertical = 5.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // API Key Section
@@ -162,7 +162,7 @@ class MainActivity : ComponentActivity() {
             ) {
                 Text(
                     text = "OpenAI API Key",
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleLarge,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 
@@ -256,13 +256,13 @@ class MainActivity : ComponentActivity() {
             ) {
                 Text(
                     text = "Permissions",
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleLarge,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 
                 Text(
                     text = stringResource(R.string.permissions_info),
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyLarge,
                     textAlign = TextAlign.Start,
                     modifier = Modifier.fillMaxWidth(),
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -300,34 +300,33 @@ class MainActivity : ComponentActivity() {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(12.dp),
+                    .padding(4.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = label,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = if (isGranted) {
-                            stringResource(R.string.permission_granted)
-                        } else {
-                            stringResource(R.string.permission_not_granted)
-                        },
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = if (isGranted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-                    )
-                }
-
-                if (!isGranted) {
+                if (isGranted) {
+                    // Show granted status text
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Start,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+                        Text(
+                            text = stringResource(R.string.permission_granted),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                } else {
+                    // Show only the grant button
                     Button(
                         onClick = onGrant,
-                        modifier = Modifier.wrapContentWidth(),
+                        modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.primary
                         )
@@ -337,7 +336,9 @@ class MainActivity : ComponentActivity() {
                                 stringResource(R.string.grant_accessibility_permission)
                             } else {
                                 stringResource(R.string.grant_overlay_permission)
-                            }
+                            },
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
                 }
