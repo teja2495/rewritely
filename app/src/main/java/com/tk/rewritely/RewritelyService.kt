@@ -51,6 +51,8 @@ class RewritelyService : AccessibilityService() {
     // Variables for ChatGPT auto-paste functionality
     private var textToPaste: String? = null
     private var shouldPasteInChatGpt = false
+    private var pasteRetryCount = 0
+    private val maxPasteRetries = 3
 
     // Icon position & drag state
     private var lastX = 0
@@ -90,7 +92,8 @@ class RewritelyService : AccessibilityService() {
                     val packageName = event.packageName?.toString()
                     if (packageName?.contains("openai") == true || packageName?.contains("chatgpt") == true) {
                         scope.launch {
-                            delay(1000) // Wait for app to fully load
+                            // Wait longer for app to fully load and stabilize
+                            delay(2000)
                             pasteTextInChatGpt()
                         }
                     }
@@ -466,6 +469,7 @@ class RewritelyService : AccessibilityService() {
         // Set up auto-paste functionality
         textToPaste = textWithInstruction
         shouldPasteInChatGpt = true
+        pasteRetryCount = 0
 
         // Try to open ChatGPT app
         try {
@@ -510,29 +514,63 @@ class RewritelyService : AccessibilityService() {
             val inputField = findChatGptInputField(rootNode)
             
             if (inputField != null) {
-                // Paste the text into the input field
-                val bundle = Bundle()
-                bundle.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, textToPaste)
-                inputField.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, bundle)
+                // First, focus the input field
+                inputField.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
                 
-                Toast.makeText(this, "Text pasted in ChatGPT!", Toast.LENGTH_SHORT).show()
-                
-                // Reset the auto-paste state
-                textToPaste = null
-                shouldPasteInChatGpt = false
-            } else {
-                // Reset after a few attempts
+                // Wait a bit for focus to be established
                 scope.launch {
-                    delay(3000)
-                    if (shouldPasteInChatGpt) {
-                        shouldPasteInChatGpt = false
-                        textToPaste = null
+                    delay(500)
+                    
+                    // Try multiple paste methods for better reliability
+                    val bundle = Bundle()
+                    bundle.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, textToPaste)
+                    
+                    // Method 1: Set text directly
+                    val success1 = inputField.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, bundle)
+                    
+                    if (!success1) {
+                        // Method 2: Try pasting via clipboard
+                        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        val clip = ClipData.newPlainText("Text for ChatGPT", textToPaste)
+                        clipboard.setPrimaryClip(clip)
+                        
+                        delay(100)
+                        inputField.performAction(AccessibilityNodeInfo.ACTION_PASTE)
                     }
+                    
+                    Toast.makeText(this@RewritelyService, "Text pasted in ChatGPT!", Toast.LENGTH_SHORT).show()
+                    
+                    // Reset the auto-paste state
+                    textToPaste = null
+                    shouldPasteInChatGpt = false
+                    pasteRetryCount = 0
+                }
+            } else {
+                // Try again after a delay if input field not found
+                pasteRetryCount++
+                if (pasteRetryCount <= maxPasteRetries) {
+                    scope.launch {
+                        delay(1000)
+                        if (shouldPasteInChatGpt) {
+                            pasteTextInChatGpt()
+                        } else {
+                            shouldPasteInChatGpt = false
+                            textToPaste = null
+                            pasteRetryCount = 0
+                        }
+                    }
+                } else {
+                    // Max retries reached, give up
+                    Toast.makeText(this, "Could not paste text in ChatGPT. Please paste manually.", Toast.LENGTH_LONG).show()
+                    shouldPasteInChatGpt = false
+                    textToPaste = null
+                    pasteRetryCount = 0
                 }
             }
         } catch (e: Exception) {
             shouldPasteInChatGpt = false
             textToPaste = null
+            pasteRetryCount = 0
         }
     }
 
@@ -543,29 +581,34 @@ class RewritelyService : AccessibilityService() {
             "com.openai.chatgpt:id/message_input",
             "com.openai.chatgpt:id/chat_input",
             "com.openai.chatgpt:id/edit_text",
+            "com.openai.chatgpt:id/prompt_input",
+            "com.openai.chatgpt:id/text_input",
             "input_field",
             "message_input",
             "chat_input",
-            "edit_text"
+            "edit_text",
+            "prompt_input",
+            "text_input"
         )
         
         // Search for input fields by ID
         for (id in inputFieldIds) {
             val nodes = rootNode.findAccessibilityNodeInfosByViewId(id)
             if (nodes.isNotEmpty()) {
-                val inputField = nodes.first()
-                if (inputField.isEditable) {
-                    return inputField
+                for (node in nodes) {
+                    if (node.isEditable && node.isVisibleToUser) {
+                        return node
+                    }
                 }
             }
         }
         
-        // Search for any editable text field
+        // Search for any editable text field that's visible and focused
         return findEditableTextField(rootNode)
     }
 
     private fun findEditableTextField(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-        if (node.isEditable && node.className == "android.widget.EditText") {
+        if (node.isEditable && node.className == "android.widget.EditText" && node.isVisibleToUser) {
             return node
         }
         
@@ -585,6 +628,10 @@ class RewritelyService : AccessibilityService() {
         scope.cancel()
         currentNode?.clear()
         ignoredFields.clear()
+        // Reset ChatGPT paste state
+        shouldPasteInChatGpt = false
+        textToPaste = null
+        pasteRetryCount = 0
     }
 
     private fun Int.dpToPx(): Int {
