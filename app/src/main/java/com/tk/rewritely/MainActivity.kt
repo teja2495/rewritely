@@ -278,23 +278,26 @@ class MainActivity : ComponentActivity() {
                     .padding(horizontal = 20.dp, vertical = 5.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Default and ChatGPT cards (always shown first)
-                item {
-                    DefaultOptionCard(
-                        onEdit = { 
-                            val defaultOption = customOptions.find { it.isDefault }
-                            if (defaultOption != null) {
-                                showEditDialog = defaultOption
+                // Default card (only shown when API key is set)
+                if (hasApiKey) {
+                    item {
+                        DefaultOptionCard(
+                            onEdit = { 
+                                val defaultOption = customOptions.find { it.isDefault }
+                                if (defaultOption != null) {
+                                    showEditDialog = defaultOption
+                                }
+                            },
+                            onReset = {
+                                SecurePrefs.resetDefaultOption(context)
+                                customOptions = SecurePrefs.getCustomOptions(context)
+                                Toast.makeText(context, "Default option reset to default prompt.", Toast.LENGTH_SHORT).show()
                             }
-                        },
-                        onReset = {
-                            SecurePrefs.resetDefaultOption(context)
-                            customOptions = SecurePrefs.getCustomOptions(context)
-                            Toast.makeText(context, "Default option reset to default prompt.", Toast.LENGTH_SHORT).show()
-                        }
-                    )
+                        )
+                    }
                 }
                 
+                // ChatGPT card (always shown)
                 item {
                     ChatGptOptionCard(
                         onEdit = { 
