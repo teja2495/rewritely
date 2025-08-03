@@ -296,6 +296,32 @@ class RewritelyService : AccessibilityService() {
         }
     }
 
+    private fun selectAllTextInCurrentField() {
+        val node = currentNode?.get()?.takeIf { it.stillValid() }
+        if (node != null) {
+            val currentText = node.text?.toString().orEmpty()
+            if (currentText.isNotEmpty()) {
+                // First, focus the node to ensure it's active
+                node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+                
+                // Wait a bit for focus to be established, then select all text
+                scope.launch {
+                    delay(100) // Small delay to ensure focus is established
+                    
+                    // Select all text by setting selection from 0 to text length
+                    Bundle().apply {
+                        putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, 0)
+                        putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, currentText.length)
+                        node.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, this)
+                    }
+                    
+                    // Additional delay to make the selection visible
+                    delay(200)
+                }
+            }
+        }
+    }
+
     // OpenAI API Call
     private fun fetchNewText(prefix: String) {
         if (isFetchInProgress) return
@@ -453,6 +479,9 @@ class RewritelyService : AccessibilityService() {
             return
         }
 
+        // First, select all text in the current input field
+        selectAllTextInCurrentField()
+
         // Get the custom prompt from the ChatGPT option
         val customOptions = SecurePrefs.getCustomOptions(this)
         val chatGptOption = customOptions.find { it.isChatGpt }
@@ -461,49 +490,54 @@ class RewritelyService : AccessibilityService() {
         // Append the instruction text to the original text
         val textWithInstruction = "$prompt$text"
 
-        // Copy text to clipboard
-        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = ClipData.newPlainText("Text for ChatGPT", textWithInstruction)
-        clipboard.setPrimaryClip(clip)
-
-        // Set up auto-paste functionality
-        textToPaste = textWithInstruction
-        shouldPasteInChatGpt = true
-        pasteRetryCount = 0
-
-        // Try to open ChatGPT app
-        try {
-            // Try multiple possible package names for ChatGPT
-            val chatGptPackages = listOf(
-                "com.openai.chatgpt",
-                "com.openai.chatgpt.android",
-                "com.openai.chatgpt.mobile",
-                "com.openai.chatgpt.app"
-            )
+        // Wait a bit for the text selection to be visible, then copy and open ChatGPT
+        scope.launch {
+            delay(500) // Wait for text selection to be visible
             
-            var appFound = false
-            for (packageName in chatGptPackages) {
-                val intent = packageManager.getLaunchIntentForPackage(packageName)
-                if (intent != null) {
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    startActivity(intent)
-                    Toast.makeText(this, "Text copied! Opening ChatGPT...", Toast.LENGTH_SHORT).show()
-                    appFound = true
-                    break
+            // Copy text to clipboard
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val clip = ClipData.newPlainText("Text for ChatGPT", textWithInstruction)
+            clipboard.setPrimaryClip(clip)
+
+            // Set up auto-paste functionality
+            textToPaste = textWithInstruction
+            shouldPasteInChatGpt = true
+            pasteRetryCount = 0
+
+            // Try to open ChatGPT app
+            try {
+                // Try multiple possible package names for ChatGPT
+                val chatGptPackages = listOf(
+                    "com.openai.chatgpt",
+                    "com.openai.chatgpt.android",
+                    "com.openai.chatgpt.mobile",
+                    "com.openai.chatgpt.app"
+                )
+                
+                var appFound = false
+                for (packageName in chatGptPackages) {
+                    val intent = packageManager.getLaunchIntentForPackage(packageName)
+                    if (intent != null) {
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        startActivity(intent)
+                        Toast.makeText(this@RewritelyService, "Text copied! Opening ChatGPT...", Toast.LENGTH_SHORT).show()
+                        appFound = true
+                        break
+                    }
                 }
-            }
-            
-            if (!appFound) {
-                // If ChatGPT app is not found, try to open Play Store
-                val playStoreIntent = Intent(Intent.ACTION_VIEW).apply {
-                    data = android.net.Uri.parse("market://details?id=com.openai.chatgpt")
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                
+                if (!appFound) {
+                    // If ChatGPT app is not found, try to open Play Store
+                    val playStoreIntent = Intent(Intent.ACTION_VIEW).apply {
+                        data = android.net.Uri.parse("market://details?id=com.openai.chatgpt")
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    startActivity(playStoreIntent)
+                    Toast.makeText(this@RewritelyService, "Text copied! ChatGPT app not found, opening Play Store.", Toast.LENGTH_LONG).show()
                 }
-                startActivity(playStoreIntent)
-                Toast.makeText(this, "Text copied! ChatGPT app not found, opening Play Store.", Toast.LENGTH_LONG).show()
+            } catch (e: Exception) {
+                Toast.makeText(this@RewritelyService, "Text copied to clipboard. Please open ChatGPT manually.", Toast.LENGTH_LONG).show()
             }
-        } catch (e: Exception) {
-            Toast.makeText(this, "Text copied to clipboard. Please open ChatGPT manually.", Toast.LENGTH_LONG).show()
         }
     }
 
