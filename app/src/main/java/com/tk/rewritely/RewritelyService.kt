@@ -122,6 +122,14 @@ class RewritelyService : AccessibilityService() {
             fresh?.recycle()
             return hideIcon()
         }
+        
+        // Check if we should show the icon in this app
+        val packageName = fresh?.packageName?.toString()
+        if (!SecurePrefs.shouldShowIconInApp(this, packageName)) {
+            fresh?.recycle()
+            return hideIcon()
+        }
+        
         if (fresh?.isEditable == true && fresh.isFocused) {
             currentNode = WeakReference(fresh)
             updateIcon()

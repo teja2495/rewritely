@@ -2,6 +2,7 @@ package com.tk.rewritely
 
 import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -14,11 +15,26 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.clickable
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.layout.wrapContentHeight
+
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material3.*
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.*
@@ -33,16 +49,37 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.size
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
 
-    private val TAG = "MainActivity"
+        private val TAG = "MainActivity"
+
+    private fun handleKeystoreIssues() {
+        try {
+            // Test if EncryptedSharedPreferences can be created
+            if (!SecurePrefs.testEncryptedSharedPreferences(this)) {
+                Log.w(TAG, "Keystore corruption detected, attempting to reset and migrate data")
+                SecurePrefs.resetKeystoreAndMigrateData(this)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error handling keystore issues", e)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Check for keystore corruption and handle it
+        handleKeystoreIssues()
+        
         setContent {
             MaterialTheme(
                 colorScheme = darkColorScheme()
@@ -75,6 +112,7 @@ class MainActivity : ComponentActivity() {
         var isAccessibilityEnabled by remember { mutableStateOf(false) }
         var hasOverlayPermission by remember { mutableStateOf(false) }
         var showCustomOptionsScreen by remember { mutableStateOf(false) }
+        var showAppSelectionScreen by remember { mutableStateOf(false) }
 
         // Update states when the screen is displayed
         LaunchedEffect(Unit) {
@@ -101,6 +139,10 @@ class MainActivity : ComponentActivity() {
             CustomOptionsScreen(
                 onBackPressed = { showCustomOptionsScreen = false }
             )
+        } else if (showAppSelectionScreen) {
+            AppSelectionScreen(
+                onBackPressed = { showAppSelectionScreen = false }
+            )
         } else {
             Scaffold(
                 topBar = {
@@ -126,33 +168,49 @@ class MainActivity : ComponentActivity() {
                         .padding(horizontal = 20.dp, vertical = 5.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    // API Key Section
-                    item {
-                        ApiKeySection(
-                            apiKey = apiKey,
-                            onApiKeyChange = { apiKey = it },
-                            hasApiKey = hasApiKey,
-                            onSaveKey = {
-                                if (apiKey.trim().length == 164 && apiKey.startsWith("sk-proj-")) {
-                                    SecurePrefs.saveApiKey(context, apiKey)
-                                    apiKey = ""
-                                    hasApiKey = true
-                                    Toast.makeText(context, "API Key saved securely.", Toast.LENGTH_SHORT).show()
-                                } else {
-                                    Toast.makeText(context, "Please enter a valid OpenAI API Key (should start with 'sk-proj').", Toast.LENGTH_LONG).show()
+                    // API Key Section - show when permissions are granted OR when API key is set
+                    if ((isAccessibilityEnabled && hasOverlayPermission) || hasApiKey) {
+                        item {
+                            ApiKeySection(
+                                apiKey = apiKey,
+                                onApiKeyChange = { apiKey = it },
+                                hasApiKey = hasApiKey,
+                                onSaveKey = {
+                                    if (apiKey.trim().length == 164 && apiKey.startsWith("sk-proj-")) {
+                                        SecurePrefs.saveApiKey(context, apiKey)
+                                        apiKey = ""
+                                        hasApiKey = true
+                                        Toast.makeText(context, "API Key saved securely.", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        Toast.makeText(context, "Please enter a valid OpenAI API Key (should start with 'sk-proj').", Toast.LENGTH_LONG).show()
+                                    }
+                                },
+                                onResetKey = {
+                                    SecurePrefs.clearApiKey(context)
+                                    hasApiKey = false
+                                    Toast.makeText(context, "API Key reset.", Toast.LENGTH_SHORT).show()
                                 }
-                            },
-                            onResetKey = {
-                                SecurePrefs.clearApiKey(context)
-                                hasApiKey = false
-                                Toast.makeText(context, "API Key reset.", Toast.LENGTH_SHORT).show()
-                            }
-                        )
+                            )
+                        }
+
+                        // Divider
+                        item {
+                            HorizontalDivider()
+                        }
                     }
 
-                    // Divider
-                    item {
-                        HorizontalDivider()
+                    // App Selection Section - only show when all permissions are granted
+                    if (isAccessibilityEnabled && hasOverlayPermission) {
+                        item {
+                            AppSelectionSection(
+                                onChooseApps = { showAppSelectionScreen = true }
+                            )
+                        }
+
+                        // Divider
+                        item {
+                            HorizontalDivider()
+                        }
                     }
 
                     // Custom Options Section - only show when all permissions are granted
@@ -242,7 +300,7 @@ class MainActivity : ComponentActivity() {
                     navigationIcon = {
                         IconButton(onClick = onBackPressed) {
                             Icon(
-                                imageVector = androidx.compose.material.icons.Icons.Default.ArrowBack,
+                                imageVector = Icons.Default.ArrowBack,
                                 contentDescription = "Back"
                             )
                         }
@@ -461,6 +519,256 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    @OptIn(ExperimentalMaterial3Api::class)
+    @Composable
+    fun AppSelectionScreen(onBackPressed: () -> Unit) {
+        val context = LocalContext.current
+        var appSettings by remember { mutableStateOf(SecurePrefs.getAppSelectionSettings(context)) }
+        var searchQuery by remember { mutableStateOf("") }
+        var allApps by remember { mutableStateOf<List<AppInfo>>(emptyList()) }
+        var filteredApps by remember { mutableStateOf<List<AppInfo>>(emptyList()) }
+        var selectedApps by remember { mutableStateOf(appSettings.selectedAppPackages.toMutableSet()) }
+        var isLoading by remember { mutableStateOf(true) }
+        
+        // Focus management for search bar
+        val focusRequester = remember { FocusRequester() }
+        val keyboardController = LocalSoftwareKeyboardController.current
+
+        // Load all apps with caching
+        LaunchedEffect(Unit) {
+            isLoading = true
+            val cachedApps = AppCache.getCachedApps(context)
+            if (cachedApps.isNotEmpty()) {
+                allApps = cachedApps
+                filteredApps = cachedApps
+                isLoading = false
+            }
+            
+            // Load fresh data in background
+            val packageManager = context.packageManager
+            val installedApps = packageManager.getInstalledApplications(PackageManager.GET_META_DATA)
+                .filter { packageManager.getLaunchIntentForPackage(it.packageName) != null }
+                .map { 
+                    AppInfo(
+                        packageName = it.packageName,
+                        appName = it.loadLabel(packageManager).toString(),
+                        icon = it.loadIcon(packageManager)
+                    )
+                }
+                .sortedBy { it.appName.lowercase() }
+            
+            // Cache the fresh data
+            AppCache.cacheApps(context, installedApps)
+            
+            allApps = installedApps
+            filteredApps = installedApps
+            isLoading = false
+        }
+        
+        // Auto-focus search bar and open keyboard when screen appears
+        LaunchedEffect(Unit) {
+            delay(100) // Small delay to ensure the screen is fully rendered
+            focusRequester.requestFocus()
+            keyboardController?.show()
+        }
+
+        // Filter apps based on search query
+        LaunchedEffect(searchQuery, allApps) {
+            filteredApps = if (searchQuery.isBlank()) {
+                allApps
+            } else {
+                allApps.filter { 
+                    it.appName.contains(searchQuery, ignoreCase = true) ||
+                    it.packageName.contains(searchQuery, ignoreCase = true)
+                }
+            }
+        }
+
+        // Handle Android back button
+        BackHandler {
+            onBackPressed()
+        }
+
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { 
+                        Text(
+                            text = stringResource(R.string.app_selection_title),
+                            modifier = Modifier.padding(start = 16.dp),
+                            fontWeight = FontWeight.Bold
+                        ) 
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onBackPressed) {
+                            Icon(
+                                imageVector = Icons.Default.ArrowBack,
+                                contentDescription = "Back"
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        titleContentColor = MaterialTheme.colorScheme.onSurface,
+                        navigationIconContentColor = MaterialTheme.colorScheme.onSurface
+                    )
+                )
+            }
+        ) { paddingValues ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+            ) {
+                // Search bar at the top
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("Search apps...") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(
+                                    imageVector = Icons.Default.Clear,
+                                    contentDescription = "Clear search"
+                                )
+                            }
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 16.dp)
+                        .focusRequester(focusRequester),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                        focusedLabelColor = MaterialTheme.colorScheme.primary,
+                        unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                )
+
+                // Content area
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .padding(horizontal = 20.dp)
+                ) {
+                    // Search instruction text
+                    if (searchQuery.isBlank()) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                            modifier = Modifier.padding(top = 32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = null,
+                                modifier = Modifier.size(64.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "Search for apps that you want the floating icon to show up",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    } else {
+                        // Apps list
+                        if (isLoading) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "Loading Apps...",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                items(filteredApps) { app ->
+                                    AppItem(
+                                        app = app,
+                                        isSelected = selectedApps.contains(app.packageName),
+                                        onSelectionChanged = { isSelected ->
+                                            val updatedSelectedApps = if (isSelected) {
+                                                selectedApps + app.packageName
+                                            } else {
+                                                selectedApps - app.packageName
+                                            }
+                                            selectedApps = updatedSelectedApps.toMutableSet()
+                                            
+                                            // Save immediately - if no apps selected, show in all apps
+                                            val newSettings = AppSelectionSettings(
+                                                showInAllApps = updatedSelectedApps.isEmpty(),
+                                                selectedAppPackages = updatedSelectedApps
+                                            )
+                                            SecurePrefs.saveAppSelectionSettings(context, newSettings)
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun AppItem(
+        app: AppInfo,
+        isSelected: Boolean,
+        onSelectionChanged: (Boolean) -> Unit
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onSelectionChanged(!isSelected) },
+            colors = CardDefaults.cardColors(
+                containerColor = if (isSelected) 
+                    MaterialTheme.colorScheme.primaryContainer 
+                else 
+                    MaterialTheme.colorScheme.surfaceVariant
+            )
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = onSelectionChanged,
+                    colors = CheckboxDefaults.colors(
+                        checkedColor = MaterialTheme.colorScheme.primary,
+                        uncheckedColor = MaterialTheme.colorScheme.outline
+                    )
+                )
+                
+                Spacer(modifier = Modifier.width(12.dp))
+                
+                Text(
+                    text = app.appName,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+
     @Composable
     fun ApiKeySection(
         apiKey: String,
@@ -540,6 +848,137 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                     }
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun AppSelectionSection(onChooseApps: () -> Unit) {
+        val context = LocalContext.current
+        var appSettings by remember { mutableStateOf(SecurePrefs.getAppSelectionSettings(context)) }
+        
+        // Update settings when the composable is recomposed
+        LaunchedEffect(Unit) {
+            appSettings = SecurePrefs.getAppSelectionSettings(context)
+        }
+        
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.app_selection_title),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+
+                Text(
+                    text = stringResource(R.string.app_selection_description),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                // Show current selection status
+                val context = LocalContext.current
+                val selectedAppInfo = remember(appSettings.selectedAppPackages) {
+                    if (appSettings.selectedAppPackages.isEmpty()) {
+                        emptyList()
+                    } else {
+                        val packageManager = context.packageManager
+                        appSettings.selectedAppPackages.mapNotNull { packageName ->
+                            try {
+                                val appInfo = packageManager.getApplicationInfo(packageName, 0)
+                                AppInfo(
+                                    packageName = packageName,
+                                    appName = appInfo.loadLabel(packageManager).toString(),
+                                    icon = appInfo.loadIcon(packageManager)
+                                )
+                            } catch (e: Exception) {
+                                null
+                            }
+                        }
+                    }
+                }
+                
+                if (selectedAppInfo.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.all_apps_enabled),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                } else {
+                    // Show selected apps count and chips
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            text = "Selected Apps (${selectedAppInfo.size}):",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            items(selectedAppInfo) { app ->
+                                AssistChip(
+                                    onClick = {
+                                        val updatedSelectedApps = appSettings.selectedAppPackages.toMutableSet()
+                                        updatedSelectedApps.remove(app.packageName)
+                                        val newSettings = AppSelectionSettings(
+                                            showInAllApps = updatedSelectedApps.isEmpty(),
+                                            selectedAppPackages = updatedSelectedApps
+                                        )
+                                        SecurePrefs.saveAppSelectionSettings(context, newSettings)
+                                        appSettings = newSettings
+                                    },
+                                    label = { 
+                                        Text(
+                                            text = app.appName,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        ) 
+                                    },
+                                    trailingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Default.Clear,
+                                            contentDescription = "Remove ${app.appName}",
+                                            modifier = Modifier.size(16.dp),
+                                            tint = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    },
+                                    colors = AssistChipDefaults.assistChipColors(
+                                        containerColor = androidx.compose.ui.graphics.Color.Transparent,
+                                        labelColor = MaterialTheme.colorScheme.onSurface
+                                    ),
+                                    border = androidx.compose.foundation.BorderStroke(
+                                        width = 1.dp,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Button(
+                    onClick = onChooseApps,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary
+                    ),
+                    modifier = Modifier.wrapContentWidth()
+                ) {
+                    Text(stringResource(R.string.choose_apps))
                 }
             }
         }
