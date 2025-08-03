@@ -25,6 +25,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.lifecycle.Lifecycle
@@ -92,7 +93,13 @@ class MainActivity : ComponentActivity() {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("Rewritely") },
+                    title = { 
+                        Text(
+                            text = "Rewritely",
+                            modifier = Modifier.padding(start = 16.dp),
+                            fontWeight = FontWeight.Bold
+                        ) 
+                    },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.surface,
                         titleContentColor = MaterialTheme.colorScheme.onSurface
@@ -132,36 +139,38 @@ class MainActivity : ComponentActivity() {
                 // Divider
                 HorizontalDivider()
 
-                // Permissions Section
-                PermissionsSection(
-                    isAccessibilityEnabled = isAccessibilityEnabled,
-                    hasOverlayPermission = hasOverlayPermission,
-                    onGrantAccessibility = {
-                        try {
-                            val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                            context.startActivity(intent)
-                            Toast.makeText(context, "Please find and enable 'Input Assistant Service'.", Toast.LENGTH_LONG).show()
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Could not open Accessibility Settings.", e)
-                            Toast.makeText(context, "Could not open Accessibility Settings.", Toast.LENGTH_SHORT).show()
-                        }
-                    },
-                    onGrantOverlay = {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                // Permissions Section (only show if any permission is not granted)
+                if (!isAccessibilityEnabled || !hasOverlayPermission) {
+                    PermissionsSection(
+                        isAccessibilityEnabled = isAccessibilityEnabled,
+                        hasOverlayPermission = hasOverlayPermission,
+                        onGrantAccessibility = {
                             try {
-                                val intent = Intent(
-                                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                    Uri.parse("package:${context.packageName}")
-                                )
+                                val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
                                 context.startActivity(intent)
-                                Toast.makeText(context, "Please grant the 'Draw over other apps' permission.", Toast.LENGTH_LONG).show()
+                                Toast.makeText(context, "Please find and enable 'Input Assistant Service'.", Toast.LENGTH_LONG).show()
                             } catch (e: Exception) {
-                                Log.e(TAG, "Could not open Overlay Settings.", e)
-                                Toast.makeText(context, "Could not open Overlay Settings.", Toast.LENGTH_SHORT).show()
+                                Log.e(TAG, "Could not open Accessibility Settings.", e)
+                                Toast.makeText(context, "Could not open Accessibility Settings.", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        onGrantOverlay = {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                                try {
+                                    val intent = Intent(
+                                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                        Uri.parse("package:${context.packageName}")
+                                    )
+                                    context.startActivity(intent)
+                                    Toast.makeText(context, "Please grant the 'Draw over other apps' permission.", Toast.LENGTH_LONG).show()
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Could not open Overlay Settings.", e)
+                                    Toast.makeText(context, "Could not open Overlay Settings.", Toast.LENGTH_SHORT).show()
+                                }
                             }
                         }
-                    }
-                )
+                    )
+                }
             }
         }
     }
@@ -186,37 +195,16 @@ class MainActivity : ComponentActivity() {
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(
-                    text = "OpenAI API Key",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                
-                // API Key Status Row
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Status:",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = if (hasApiKey) {
-                            val storedKey = SecurePrefs.getApiKey(LocalContext.current)
-                            if (storedKey != null && storedKey.length > 4) {
-                                stringResource(R.string.api_key_status_masked, storedKey.takeLast(4))
-                            } else {
-                                "Set (Invalid length)"
-                            }
-                        } else {
-                            stringResource(R.string.api_key_status_not_set)
-                        },
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = if (hasApiKey) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                // API Key Status (only show if key exists)
+                if (hasApiKey) {
+                    val storedKey = SecurePrefs.getApiKey(LocalContext.current)
+                    if (storedKey != null && storedKey.length > 4) {
+                        Text(
+                            text = "OpenAI API Key: ****${storedKey.takeLast(4)}",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
                 }
 
                 // API Key Input (only show if no key exists)
@@ -224,7 +212,7 @@ class MainActivity : ComponentActivity() {
                     OutlinedTextField(
                         value = apiKey,
                         onValueChange = onApiKeyChange,
-                        label = { Text("Enter your OpenAI API Key (sk-...)") },
+                        label = { Text("Enter your OpenAI API Key") },
                         visualTransformation = PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                         modifier = Modifier.fillMaxWidth(),
@@ -237,6 +225,8 @@ class MainActivity : ComponentActivity() {
                         )
                     )
 
+                    Spacer(modifier = Modifier.height(5.dp))
+
                     Button(
                         onClick = onSaveKey,
                         modifier = Modifier.fillMaxWidth(),
@@ -244,17 +234,25 @@ class MainActivity : ComponentActivity() {
                             containerColor = MaterialTheme.colorScheme.primary
                         )
                     ) {
-                        Text("Save API Key")
+                        Text("Save")
                     }
                 } else {
-                    Button(
-                        onClick = onResetKey,
+                    Column(
                         modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary
-                        )
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text("Reset Key")
+                        Button(
+                            onClick = onResetKey,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary
+                            ),
+                            modifier = Modifier.wrapContentWidth()
+                        ) {
+                            Text(
+                                text = "Reset Key",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
                     }
                 }
             }
@@ -294,19 +292,20 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                // Accessibility Permission
-                PermissionRow(
-                    label = stringResource(R.string.accessibility_permission),
-                    isGranted = isAccessibilityEnabled,
-                    onGrant = onGrantAccessibility
-                )
+                // Only show permissions that are not granted
+                if (!isAccessibilityEnabled) {
+                    PermissionRow(
+                        label = stringResource(R.string.accessibility_permission),
+                        onGrant = onGrantAccessibility
+                    )
+                }
 
-                // Overlay Permission
-                PermissionRow(
-                    label = stringResource(R.string.overlay_permission),
-                    isGranted = hasOverlayPermission,
-                    onGrant = onGrantOverlay
-                )
+                if (!hasOverlayPermission) {
+                    PermissionRow(
+                        label = stringResource(R.string.overlay_permission),
+                        onGrant = onGrantOverlay
+                    )
+                }
             }
         }
     }
@@ -314,60 +313,31 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun PermissionRow(
         label: String,
-        isGranted: Boolean,
         onGrant: () -> Unit
     ) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
-            )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 0.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(4.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            
+            Button(
+                onClick = onGrant,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary
+                ),
+                modifier = Modifier.wrapContentWidth()
             ) {
-                if (isGranted) {
-                    // Show granted status text
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Start,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = label,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.weight(1f))
-                        Text(
-                            text = stringResource(R.string.permission_granted),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                } else {
-                    // Show only the grant button
-                    Button(
-                        onClick = onGrant,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary
-                        )
-                    ) {
-                        Text(
-                            text = if (label.contains("Accessibility")) {
-                                stringResource(R.string.grant_accessibility_permission)
-                            } else {
-                                stringResource(R.string.grant_overlay_permission)
-                            },
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
+                Text(
+                    text = "Grant Permission",
+                    style = MaterialTheme.typography.bodyMedium
+                )
             }
         }
     }

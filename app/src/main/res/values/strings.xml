@@ -11,7 +11,7 @@
     <!-- New Strings for Permissions -->
     <string name="permission_status">Status:</string>
     <string name="accessibility_permission">Accessibility Service:</string>
-    <string name="overlay_permission">Draw Over Other Apps:</string>
+    <string name="overlay_permission">Appear On Top:</string>
     <string name="permission_granted">Granted</string>
     <string name="permission_not_granted">Not Granted</string>
     <string name="grant_accessibility_permission">Grant Accessibility Service Permission</string>
