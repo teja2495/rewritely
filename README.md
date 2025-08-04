@@ -4,10 +4,10 @@ Rewritely is an Android application that enhances user input by providing an eas
 
 ## Screenshots
 
-![Home Screen](Screenshot_20250804_141513_Rewritely.jpg)
+![Home Screen](docs/screenshots/home-screen.png)
 *Settings screen showing API key management, app selection, and customization options*
 
-![Text Input with Floating Icon](Screenshot_20250804_141653_X.jpg)
+![Text Input with Floating Icon](docs/screenshots/text-input-with-floating-icon.png)
 *Text input screen with the floating rewrite icon visible*
 
 ## Features
