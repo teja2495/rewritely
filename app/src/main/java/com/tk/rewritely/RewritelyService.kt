@@ -279,7 +279,7 @@ class RewritelyService : AccessibilityService() {
                                     // Get the custom prompt from the Default option
                                     val customOptions = SecurePrefs.getCustomOptions(this)
                                     val defaultOption = customOptions.find { it.isDefault }
-                                    val prompt = defaultOption?.prompt ?: "Rewrite in common language, NEVER use Em Dashes: "
+                                    val prompt = defaultOption?.prompt ?: SecurePrefs.DEFAULT_PROMPT
                                     fetchNewText(prompt)
                                 } else {
                                     // Use ChatGPT action when API key is not set
@@ -552,7 +552,7 @@ class RewritelyService : AccessibilityService() {
         // Get the custom prompt from the ChatGPT option
         val customOptions = SecurePrefs.getCustomOptions(this)
         val chatGptOption = customOptions.find { it.isChatGpt }
-        val prompt = chatGptOption?.prompt ?: "Rewrite in common language, NEVER use emdashes: "
+        val prompt = chatGptOption?.prompt ?: SecurePrefs.DEFAULT_PROMPT
         
         // Append the instruction text to the original text
         val textWithInstruction = "$prompt$text"

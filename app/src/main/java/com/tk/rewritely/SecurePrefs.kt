@@ -18,6 +18,9 @@ object SecurePrefs {
     private const val KEY_APP_SELECTION_SETTINGS = "app_selection_settings"
 
     private const val TAG = "SecurePrefs"
+    
+    // Default prompt used throughout the app
+    const val DEFAULT_PROMPT = "Rewrite in common language, NEVER use EmDashes: "
 
     private fun getEncryptedSharedPreferences(context: Context): SharedPreferences? {
         return try {
@@ -124,13 +127,13 @@ object SecurePrefs {
             CustomOption(
                 id = UUID.randomUUID().toString(),
                 name = "Default",
-                prompt = "Rewrite in common language, NEVER use Em Dashes: ",
+                prompt = DEFAULT_PROMPT,
                 isDefault = true
             ),
             CustomOption(
                 id = UUID.randomUUID().toString(),
                 name = "ChatGPT",
-                prompt = "Rewrite in common language, NEVER use emdashes: ",
+                prompt = DEFAULT_PROMPT,
                 isChatGpt = true
             )
         )
@@ -183,7 +186,7 @@ object SecurePrefs {
         if (defaultOption != null) {
             val index = currentOptions.indexOf(defaultOption)
             currentOptions[index] = defaultOption.copy(
-                prompt = "Rewrite in common language, NEVER use Em Dashes: "
+                prompt = DEFAULT_PROMPT
             )
             saveCustomOptions(context, currentOptions)
         }
@@ -195,7 +198,7 @@ object SecurePrefs {
         if (chatGptOption != null) {
             val index = currentOptions.indexOf(chatGptOption)
             currentOptions[index] = chatGptOption.copy(
-                prompt = "Rewrite in common language, NEVER use emdashes: "
+                prompt = DEFAULT_PROMPT
             )
             saveCustomOptions(context, currentOptions)
         }

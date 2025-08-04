@@ -48,6 +48,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.size
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -276,6 +277,11 @@ class MainActivity : ComponentActivity() {
         var newOptionName by remember { mutableStateOf("") }
         var newOptionPrompt by remember { mutableStateOf("") }
         var hasApiKey by remember { mutableStateOf(false) }
+        
+        // Confirmation dialog states
+        var showDeleteConfirmation by remember { mutableStateOf<CustomOption?>(null) }
+        var showResetDefaultConfirmation by remember { mutableStateOf(false) }
+        var showResetChatGptConfirmation by remember { mutableStateOf(false) }
 
         // Check if API key is set
         LaunchedEffect(Unit) {
@@ -339,17 +345,16 @@ class MainActivity : ComponentActivity() {
                 // Default card (only shown when API key is set)
                 if (hasApiKey) {
                     item {
+                        val defaultOption = customOptions.find { it.isDefault }
                         DefaultOptionCard(
+                            prompt = defaultOption?.prompt ?: SecurePrefs.DEFAULT_PROMPT,
                             onEdit = { 
-                                val defaultOption = customOptions.find { it.isDefault }
                                 if (defaultOption != null) {
                                     showEditDialog = defaultOption
                                 }
                             },
                             onReset = {
-                                SecurePrefs.resetDefaultOption(context)
-                                customOptions = SecurePrefs.getCustomOptions(context)
-                                Toast.makeText(context, "Default option reset to default prompt.", Toast.LENGTH_SHORT).show()
+                                showResetDefaultConfirmation = true
                             }
                         )
                     }
@@ -357,17 +362,16 @@ class MainActivity : ComponentActivity() {
                 
                 // ChatGPT card (always shown)
                 item {
+                    val chatGptOption = customOptions.find { it.isChatGpt }
                     ChatGptOptionCard(
+                        prompt = chatGptOption?.prompt ?: SecurePrefs.DEFAULT_PROMPT,
                         onEdit = { 
-                            val chatGptOption = customOptions.find { it.isChatGpt }
                             if (chatGptOption != null) {
                                 showEditDialog = chatGptOption
                             }
                         },
                         onReset = {
-                            SecurePrefs.resetChatGptOption(context)
-                            customOptions = SecurePrefs.getCustomOptions(context)
-                            Toast.makeText(context, "ChatGPT option reset to default prompt.", Toast.LENGTH_SHORT).show()
+                            showResetChatGptConfirmation = true
                         }
                     )
                 }
@@ -404,8 +408,7 @@ class MainActivity : ComponentActivity() {
                         option = option,
                         onEdit = { showEditDialog = option },
                         onDelete = {
-                            SecurePrefs.deleteCustomOption(context, option.id)
-                            customOptions = SecurePrefs.getCustomOptions(context)
+                            showDeleteConfirmation = option
                         }
                     )
                 }
@@ -468,11 +471,7 @@ class MainActivity : ComponentActivity() {
         // Edit Dialog
         showEditDialog?.let { option ->
             var editName by remember { mutableStateOf(option.name) }
-            var editPrompt by remember { 
-                mutableStateOf(
-                    if (option.isDefault) "" else option.prompt
-                ) 
-            }
+            var editPrompt by remember { mutableStateOf(option.prompt) }
 
             AlertDialog(
                 onDismissRequest = { showEditDialog = null },
@@ -512,6 +511,83 @@ class MainActivity : ComponentActivity() {
                 },
                 dismissButton = {
                     TextButton(onClick = { showEditDialog = null }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                }
+            )
+        }
+
+        // Delete Confirmation Dialog
+        showDeleteConfirmation?.let { option ->
+            AlertDialog(
+                onDismissRequest = { showDeleteConfirmation = null },
+                title = { Text(stringResource(R.string.delete_option)) },
+                text = { Text(stringResource(R.string.delete_confirmation_message, option.name)) },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            SecurePrefs.deleteCustomOption(context, option.id)
+                            customOptions = SecurePrefs.getCustomOptions(context)
+                            showDeleteConfirmation = null
+                        }
+                    ) {
+                        Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDeleteConfirmation = null }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                }
+            )
+        }
+
+        // Reset Default Confirmation Dialog
+        if (showResetDefaultConfirmation) {
+            AlertDialog(
+                onDismissRequest = { showResetDefaultConfirmation = false },
+                title = { Text(stringResource(R.string.reset_default_option)) },
+                text = { Text(stringResource(R.string.reset_default_confirmation_message)) },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            SecurePrefs.resetDefaultOption(context)
+                            customOptions = SecurePrefs.getCustomOptions(context)
+                            Toast.makeText(context, "Default option reset to default prompt.", Toast.LENGTH_SHORT).show()
+                            showResetDefaultConfirmation = false
+                        }
+                    ) {
+                        Text(stringResource(R.string.reset_to_default))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showResetDefaultConfirmation = false }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                }
+            )
+        }
+
+        // Reset ChatGPT Confirmation Dialog
+        if (showResetChatGptConfirmation) {
+            AlertDialog(
+                onDismissRequest = { showResetChatGptConfirmation = false },
+                title = { Text(stringResource(R.string.reset_chatgpt_option)) },
+                text = { Text(stringResource(R.string.reset_chatgpt_confirmation_message)) },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            SecurePrefs.resetChatGptOption(context)
+                            customOptions = SecurePrefs.getCustomOptions(context)
+                            Toast.makeText(context, "ChatGPT option reset to default prompt.", Toast.LENGTH_SHORT).show()
+                            showResetChatGptConfirmation = false
+                        }
+                    ) {
+                        Text(stringResource(R.string.reset_to_default))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showResetChatGptConfirmation = false }) {
                         Text(stringResource(R.string.cancel))
                     }
                 }
@@ -1034,9 +1110,11 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    fun DefaultOptionCard(onEdit: () -> Unit, onReset: () -> Unit) {
+    fun DefaultOptionCard(prompt: String, onEdit: () -> Unit, onReset: () -> Unit) {
         Card(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onEdit() },
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceVariant
             )
@@ -1052,6 +1130,13 @@ class MainActivity : ComponentActivity() {
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface
                 )
+                Text(
+                    text = "Prompt: $prompt",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
@@ -1059,18 +1144,17 @@ class MainActivity : ComponentActivity() {
                     TextButton(onClick = onReset) {
                         Text(stringResource(R.string.reset_to_default))
                     }
-                    TextButton(onClick = onEdit) {
-                        Text(stringResource(R.string.edit))
-                    }
                 }
             }
         }
     }
 
     @Composable
-    fun ChatGptOptionCard(onEdit: () -> Unit, onReset: () -> Unit) {
+    fun ChatGptOptionCard(prompt: String, onEdit: () -> Unit, onReset: () -> Unit) {
         Card(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onEdit() },
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceVariant
             )
@@ -1086,15 +1170,19 @@ class MainActivity : ComponentActivity() {
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface
                 )
+                Text(
+                    text = "Prompt: $prompt",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
                 ) {
                     TextButton(onClick = onReset) {
                         Text(stringResource(R.string.reset_to_default))
-                    }
-                    TextButton(onClick = onEdit) {
-                        Text(stringResource(R.string.edit))
                     }
                 }
             }
@@ -1108,7 +1196,9 @@ class MainActivity : ComponentActivity() {
         onDelete: () -> Unit
     ) {
         Card(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onEdit() },
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceVariant
             )
@@ -1127,15 +1217,14 @@ class MainActivity : ComponentActivity() {
                 Text(
                     text = "Prompt: ${option.prompt}",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
                 ) {
-                    TextButton(onClick = onEdit) {
-                        Text(stringResource(R.string.edit))
-                    }
                     TextButton(onClick = onDelete) {
                         Text(stringResource(R.string.delete))
                     }
