@@ -34,8 +34,11 @@ class RewritelyService : AccessibilityService() {
     private var floatingIcon: View? = null
     private var sparkleIcon: ImageView? = null
     private var optionsIcon: ImageView? = null
+    private var undoIcon: ImageView? = null
 
     private var originalText: String = ""
+    private var lastRewrittenText: String = ""
+    private var undoJob: Job? = null
 
     private var lastPackage: String? = null
 
@@ -170,7 +173,17 @@ class RewritelyService : AccessibilityService() {
             // Check if API key is set to determine whether to show options icon
             val hasApiKey = !SecurePrefs.getApiKey(this).isNullOrBlank()
             
-            // Add sparkle icon first (left side)
+            // Create undo icon (initially hidden) - positioned to the left of sparkle
+            undoIcon = ImageView(this).apply {
+                setImageResource(R.drawable.undo_icon)
+                layoutParams = LinearLayout.LayoutParams(25.dpToPx(), 25.dpToPx()).apply {
+                    marginEnd = 8.dpToPx()
+                }
+                visibility = View.GONE
+            }
+            container.addView(undoIcon)
+            
+            // Add sparkle icon
             container.addView(sparkleIcon)
             
             if (hasApiKey) {
@@ -187,6 +200,7 @@ class RewritelyService : AccessibilityService() {
             val touchListener = iconTouchListener()
             sparkleIcon?.setOnTouchListener(touchListener)
             optionsIcon?.setOnTouchListener(touchListener)
+            undoIcon?.setOnTouchListener(touchListener)
 
             floatingIcon = container
             windowManager.addView(
@@ -202,10 +216,13 @@ class RewritelyService : AccessibilityService() {
     private fun hideIcon() {
         longPressJob?.cancel()
         longPressJob = null
+        undoJob?.cancel()
+        undoJob = null
         floatingIcon?.let { runCatching { windowManager.removeView(it) } }
         floatingIcon = null
         sparkleIcon = null
         optionsIcon = null
+        undoIcon = null
     }
 
     private fun iconTouchListener() =
@@ -265,6 +282,8 @@ class RewritelyService : AccessibilityService() {
                                     // Use ChatGPT action when API key is not set
                                     copyTextAndOpenChatGPT()
                                 }
+                            } else if (v == undoIcon) {
+                                undoLastRewrite()
                             }
                         }
                         isDragging = false
@@ -357,7 +376,9 @@ class RewritelyService : AccessibilityService() {
                 withContext(Dispatchers.Main) {
                     val result = res.body()?.choices?.firstOrNull()?.message?.content?.trim()
                     if (res.isSuccessful && !result.isNullOrBlank()) {
+                        lastRewrittenText = getInputFieldText()
                         setInputFieldText(result)
+                        showUndoIcon()
                     } else {
                         Toast.makeText(applicationContext, "API Error", Toast.LENGTH_LONG).show()
                     }
@@ -370,6 +391,29 @@ class RewritelyService : AccessibilityService() {
             } finally {
                 withContext(Dispatchers.Main) { isFetchInProgress = false }
             }
+        }
+    }
+
+    private fun showUndoIcon() {
+        undoJob?.cancel()
+        undoIcon?.visibility = View.VISIBLE
+        
+        undoJob = scope.launch {
+            delay(5000) // Show for 3 seconds
+            withContext(Dispatchers.Main) {
+                undoIcon?.visibility = View.GONE
+            }
+        }
+    }
+
+    private fun undoLastRewrite() {
+        if (lastRewrittenText.isNotEmpty()) {
+            setInputFieldText(lastRewrittenText)
+            undoIcon?.visibility = View.GONE
+            undoJob?.cancel()
+            undoJob = null
+            lastRewrittenText = ""
+            Toast.makeText(this, "Undone", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -669,6 +713,10 @@ class RewritelyService : AccessibilityService() {
         shouldPasteInChatGpt = false
         textToPaste = null
         pasteRetryCount = 0
+        // Reset undo state
+        lastRewrittenText = ""
+        undoJob?.cancel()
+        undoJob = null
     }
 
     private fun Int.dpToPx(): Int {
