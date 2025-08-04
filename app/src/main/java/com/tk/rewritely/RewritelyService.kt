@@ -53,6 +53,9 @@ class RewritelyService : AccessibilityService() {
     private var shouldPasteInChatGpt = false
     private var pasteRetryCount = 0
     private val maxPasteRetries = 3
+    
+    // Add a flag to temporarily ignore text change events
+    private var ignoringTextChanges = false
 
     // Icon position & drag state
     private var lastX = 0
@@ -80,7 +83,7 @@ class RewritelyService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (isOptionsMenuShowing) return
+        if (isOptionsMenuShowing || ignoringTextChanges) return
 
         when (event?.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
@@ -92,8 +95,8 @@ class RewritelyService : AccessibilityService() {
                     val packageName = event.packageName?.toString()
                     if (packageName?.contains("openai") == true || packageName?.contains("chatgpt") == true) {
                         scope.launch {
-                            // Wait longer for app to fully load and stabilize
-                            delay(2000)
+                            // Wait for app to load and stabilize
+                            delay(1500) // Reduced from 2500ms
                             pasteTextInChatGpt()
                         }
                     }
@@ -551,38 +554,29 @@ class RewritelyService : AccessibilityService() {
 
     private fun pasteTextInChatGpt() {
         try {
-            // Find the input field in ChatGPT app
             val rootNode = rootInActiveWindow ?: return
             val inputField = findChatGptInputField(rootNode)
             
             if (inputField != null) {
-                // First, focus the input field
                 inputField.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
                 
-                // Wait a bit for focus to be established
                 scope.launch {
-                    delay(500)
+                    delay(400)
                     
-                    // Try multiple paste methods for better reliability
+                    // Temporarily disable handling of text change events
+                    ignoringTextChanges = true
+                    
                     val bundle = Bundle()
                     bundle.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, textToPaste)
+                    inputField.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, bundle)
                     
-                    // Method 1: Set text directly
-                    val success1 = inputField.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, bundle)
+                    delay(300) // Reduced delay
                     
-                    if (!success1) {
-                        // Method 2: Try pasting via clipboard
-                        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        val clip = ClipData.newPlainText("Text for ChatGPT", textToPaste)
-                        clipboard.setPrimaryClip(clip)
-                        
-                        delay(100)
-                        inputField.performAction(AccessibilityNodeInfo.ACTION_PASTE)
-                    }
+                    // Re-enable text change handling
+                    ignoringTextChanges = false
                     
                     Toast.makeText(this@RewritelyService, "Text pasted in ChatGPT!", Toast.LENGTH_SHORT).show()
                     
-                    // Reset the auto-paste state
                     textToPaste = null
                     shouldPasteInChatGpt = false
                     pasteRetryCount = 0
@@ -610,6 +604,7 @@ class RewritelyService : AccessibilityService() {
                 }
             }
         } catch (e: Exception) {
+            ignoringTextChanges = false // Make sure to reset on error
             shouldPasteInChatGpt = false
             textToPaste = null
             pasteRetryCount = 0

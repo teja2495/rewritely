@@ -61,4 +61,4 @@ output.json
 build/
 .navigation/
 .cxx/
-.salive
+*.salive
