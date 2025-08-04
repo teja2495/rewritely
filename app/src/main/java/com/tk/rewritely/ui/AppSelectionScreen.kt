@@ -116,10 +116,33 @@ fun AppSelectionScreen(onBackPressed: () -> Unit) {
         filteredApps = if (searchQuery.isBlank()) {
             allApps
         } else {
-            allApps.filter { 
-                it.appName.contains(searchQuery, ignoreCase = true) ||
-                it.packageName.contains(searchQuery, ignoreCase = true)
+            val query = searchQuery.lowercase()
+            val exactMatches = mutableListOf<AppInfo>()
+            val startsWithMatches = mutableListOf<AppInfo>()
+            val otherMatches = mutableListOf<AppInfo>()
+            
+            allApps.forEach { app ->
+                val appNameLower = app.appName.lowercase()
+                val packageNameLower = app.packageName.lowercase()
+                
+                when {
+                    // 1st priority: Exact matches (case insensitive)
+                    appNameLower == query || packageNameLower == query -> {
+                        exactMatches.add(app)
+                    }
+                    // 2nd priority: App names that start with the search term
+                    appNameLower.startsWith(query) -> {
+                        startsWithMatches.add(app)
+                    }
+                    // 3rd priority: Other matches (contains the search term)
+                    appNameLower.contains(query) || packageNameLower.contains(query) -> {
+                        otherMatches.add(app)
+                    }
+                }
             }
+            
+            // Combine results in priority order
+            exactMatches + startsWithMatches + otherMatches
         }
     }
 
