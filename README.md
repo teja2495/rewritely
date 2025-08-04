@@ -5,7 +5,7 @@ Rewritely is an Android app that helps users quickly rewrite their written text 
 ## Screenshots
 
 <div align="center">
-  <img src="docs/screenshots/home-screen.png" alt="Home Screen" width="45%" />
+  <img src="docs/screenshots/home-screen.jpg" alt="Home Screen" width="45%" />
   <img src="docs/screenshots/text-input-with-floating-icon.png" alt="Text Input with Floating Icon" width="45%" />
 </div>
 
