@@ -1,6 +1,6 @@
 # Rewritely - Android App for Text Rewriting
 
-Rewritely is an Android application that enhances user input by providing an easy way to rewrite text in any input field. It uses the OpenAI API to generate rewritten text and displays a floating icon for quick access.
+Rewritely is an Android app that helps users quickly rewrite their written text to improve grammar and sentence structure in any app.
 
 ## Screenshots
 
@@ -18,8 +18,8 @@ Rewritely is an Android application that enhances user input by providing an eas
 * **Floating Icon:** Provides a non-intrusive floating icon for easy access to the rewrite functionality. Type at least 3 words in the input field for the icon to show up.
 * **API Key Management:** Securely stores and manages the OpenAI API key with the ability to reset it.
 * **App Selection:** Choose which specific apps should show the floating icon, or enable it for all apps.
-* **Custom Options:** Create and manage custom rewrite prompts with up to 4 custom options plus default and ChatGPT options.
-* **Smart Caching:** Efficient app list caching for better performance during app selection.
+* **Custom Options:** Create and manage custom rewrite prompts with up to 4 custom options plus default and ChatGPT options. Users can also update default prompts along with adding new custom options.
+* **ChatGPT Integration:** Special ChatGPT option that copy-pastes text directly into ChatGPT with the configured prompt for seamless workflow.
 * **Permissions Handling:** Manages necessary permissions, including Accessibility Service and Draw Over Other Apps.
 
 ## Prerequisites
@@ -100,10 +100,6 @@ The app requires the following permissions:
 * The app uses `foregroundServiceType="specialUse"` and the corresponding permission for Android 14 to provide a clear justification for its background operation, emphasizing its assistance features.
 * Custom options are limited to 4 additional options plus the default and ChatGPT options.
 * App selection settings are saved automatically and persist across app restarts.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit pull requests or open issues.
 
 ## License
 
