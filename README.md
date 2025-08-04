@@ -99,4 +99,4 @@ The app requires the following permissions:
 
 ## License
 
-Apache 2.0 License
+MIT License
