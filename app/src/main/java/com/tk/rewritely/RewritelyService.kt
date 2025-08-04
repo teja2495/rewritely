@@ -37,6 +37,7 @@ class RewritelyService : AccessibilityService() {
     private var undoIcon: ImageView? = null
 
     private var originalText: String = ""
+    private var trueOriginalText: String = "" // Track the true original text for retries
     private var lastRewrittenText: String = ""
     private var undoJob: Job? = null
 
@@ -137,6 +138,8 @@ class RewritelyService : AccessibilityService() {
         }
         
         if (fresh?.isEditable == true && fresh.isFocused) {
+            // Reset true original text when switching to a new field
+            trueOriginalText = ""
             currentNode = WeakReference(fresh)
             updateIcon()
         } else {
@@ -360,7 +363,13 @@ class RewritelyService : AccessibilityService() {
                 SecurePrefs.getApiKey(this)
                         ?: return Toast.makeText(this, "API Key not set.", Toast.LENGTH_LONG).show()
 
-        originalText = getInputFieldText()
+        // If this is the first time rewriting this text, capture the true original
+        if (trueOriginalText.isBlank()) {
+            trueOriginalText = getInputFieldText()
+        }
+        
+        // Use the true original text for all rewrites (retries)
+        originalText = trueOriginalText
         if (originalText.isBlank()) {
             return Toast.makeText(this, "Nothing to rewrite.", Toast.LENGTH_SHORT).show()
         }
@@ -376,7 +385,8 @@ class RewritelyService : AccessibilityService() {
                 withContext(Dispatchers.Main) {
                     val result = res.body()?.choices?.firstOrNull()?.message?.content?.trim()
                     if (res.isSuccessful && !result.isNullOrBlank()) {
-                        lastRewrittenText = getInputFieldText()
+                        // Store the true original text for undo, not the current field text
+                        lastRewrittenText = trueOriginalText
                         setInputFieldText(result)
                         showUndoIcon()
                     } else {
@@ -399,7 +409,7 @@ class RewritelyService : AccessibilityService() {
         undoIcon?.visibility = View.VISIBLE
         
         undoJob = scope.launch {
-            delay(5000) // Show for 3 seconds
+            delay(30000) // Show for 30 seconds
             withContext(Dispatchers.Main) {
                 undoIcon?.visibility = View.GONE
             }
@@ -413,6 +423,8 @@ class RewritelyService : AccessibilityService() {
             undoJob?.cancel()
             undoJob = null
             lastRewrittenText = ""
+            // Reset true original text when undoing, so next tap will capture new original
+            trueOriginalText = ""
             Toast.makeText(this, "Undone", Toast.LENGTH_SHORT).show()
         }
     }
@@ -715,6 +727,7 @@ class RewritelyService : AccessibilityService() {
         pasteRetryCount = 0
         // Reset undo state
         lastRewrittenText = ""
+        trueOriginalText = ""
         undoJob?.cancel()
         undoJob = null
     }
