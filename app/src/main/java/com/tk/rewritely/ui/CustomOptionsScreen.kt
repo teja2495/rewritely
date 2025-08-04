@@ -380,12 +380,15 @@ fun DefaultOptionCard(prompt: String, onEdit: () -> Unit, onReset: () -> Unit) {
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                TextButton(onClick = onReset) {
-                    Text(stringResource(R.string.reset_to_default))
+            // Only show reset button if prompt is different from default
+            if (prompt != SecurePrefs.DEFAULT_PROMPT) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onReset) {
+                        Text(stringResource(R.string.reset_to_default))
+                    }
                 }
             }
         }
@@ -420,12 +423,15 @@ fun ChatGptOptionCard(prompt: String, onEdit: () -> Unit, onReset: () -> Unit) {
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                TextButton(onClick = onReset) {
-                    Text(stringResource(R.string.reset_to_default))
+            // Only show reset button if prompt is different from default
+            if (prompt != SecurePrefs.DEFAULT_PROMPT) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onReset) {
+                        Text(stringResource(R.string.reset_to_default))
+                    }
                 }
             }
         }
