@@ -26,6 +26,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.size
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.tk.rewritely.AppCache
 import com.tk.rewritely.AppInfo
 import com.tk.rewritely.AppSelectionSettings
@@ -37,46 +40,66 @@ import kotlinx.coroutines.delay
 @Composable
 fun AppSelectionScreen(onBackPressed: () -> Unit) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     var appSettings by remember { mutableStateOf(SecurePrefs.getAppSelectionSettings(context)) }
     var searchQuery by remember { mutableStateOf("") }
     var allApps by remember { mutableStateOf<List<AppInfo>>(emptyList()) }
     var filteredApps by remember { mutableStateOf<List<AppInfo>>(emptyList()) }
     var selectedApps by remember { mutableStateOf(appSettings.selectedAppPackages.toMutableSet()) }
     var isLoading by remember { mutableStateOf(true) }
+    var shouldRefreshCache by remember { mutableStateOf(false) }
     
     // Focus management for search bar
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
 
-    // Load all apps with caching
-    LaunchedEffect(Unit) {
+    // Track app lifecycle to determine when to refresh cache
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            // Check if we need to refresh cache (app was minimized and reopened)
+            val cachedApps = AppCache.getCachedApps(context)
+            if (cachedApps.isEmpty()) {
+                shouldRefreshCache = true
+            } else {
+                // Only refresh if cache is stale or empty
+                shouldRefreshCache = AppCache.isCacheStale(context)
+            }
+        }
+    }
+
+    // Load apps with smart caching
+    LaunchedEffect(shouldRefreshCache) {
         isLoading = true
+        
+        // First, try to load from cache
         val cachedApps = AppCache.getCachedApps(context)
-        if (cachedApps.isNotEmpty()) {
+        if (cachedApps.isNotEmpty() && !shouldRefreshCache) {
+            // Use cached data immediately
             allApps = cachedApps
             filteredApps = cachedApps
             isLoading = false
+        } else {
+            // Load fresh data in background
+            val packageManager = context.packageManager
+            val installedApps = packageManager.getInstalledApplications(PackageManager.GET_META_DATA)
+                .filter { packageManager.getLaunchIntentForPackage(it.packageName) != null }
+                .map { 
+                    AppInfo(
+                        packageName = it.packageName,
+                        appName = it.loadLabel(packageManager).toString(),
+                        icon = it.loadIcon(packageManager)
+                    )
+                }
+                .sortedBy { it.appName.lowercase() }
+            
+            // Cache the fresh data
+            AppCache.cacheApps(context, installedApps)
+            
+            allApps = installedApps
+            filteredApps = installedApps
+            isLoading = false
+            shouldRefreshCache = false
         }
-        
-        // Load fresh data in background
-        val packageManager = context.packageManager
-        val installedApps = packageManager.getInstalledApplications(PackageManager.GET_META_DATA)
-            .filter { packageManager.getLaunchIntentForPackage(it.packageName) != null }
-            .map { 
-                AppInfo(
-                    packageName = it.packageName,
-                    appName = it.loadLabel(packageManager).toString(),
-                    icon = it.loadIcon(packageManager)
-                )
-            }
-            .sortedBy { it.appName.lowercase() }
-        
-        // Cache the fresh data
-        AppCache.cacheApps(context, installedApps)
-        
-        allApps = installedApps
-        filteredApps = installedApps
-        isLoading = false
     }
     
     // Auto-focus search bar and open keyboard when screen appears (only when not loading)

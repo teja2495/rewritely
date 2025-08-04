@@ -55,6 +55,8 @@ import com.tk.rewritely.ui.AppSelectionScreen
 class MainActivity : ComponentActivity() {
 
         private val TAG = "MainActivity"
+        private var isFirstLaunch = true
+        private var wasInBackground = false
 
     private fun handleKeystoreIssues() {
         try {
@@ -74,6 +76,12 @@ class MainActivity : ComponentActivity() {
         // Check for keystore corruption and handle it
         handleKeystoreIssues()
         
+        // Clear app cache on fresh launch to ensure fresh data
+        if (isFirstLaunch) {
+            AppCache.clearCache(this)
+            isFirstLaunch = false
+        }
+        
         setContent {
             MaterialTheme(
                 colorScheme = darkColorScheme()
@@ -90,11 +98,23 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        
+        // If app was in background and now resumed, mark cache for refresh
+        if (wasInBackground) {
+            AppCache.markCacheForRefresh(this)
+            wasInBackground = false
+        }
+        
         // Refresh states when returning from settings
         updateStates(this) { apiKeyExists, accessibility, overlay ->
             // Update the UI state if needed
             // Note: Since we're using Compose, the UI will be updated through LaunchedEffect
         }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        wasInBackground = true
     }
 
     @OptIn(ExperimentalMaterial3Api::class)

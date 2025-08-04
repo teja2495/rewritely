@@ -54,6 +54,28 @@ object AppCache {
         }
     }
 
+    fun isCacheStale(context: Context): Boolean {
+        return try {
+            val prefs = getSharedPreferences(context)
+            val timestamp = prefs.getLong(KEY_CACHE_TIMESTAMP, 0L)
+            !isCacheValid(timestamp)
+        } catch (e: Exception) {
+            true // Consider cache stale if there's an error
+        }
+    }
+
+    fun markCacheForRefresh(context: Context) {
+        try {
+            // Set timestamp to a very old value to make cache stale
+            val prefs = getSharedPreferences(context)
+            prefs.edit()
+                .putLong(KEY_CACHE_TIMESTAMP, 0L)
+                .apply()
+        } catch (e: Exception) {
+            // Log error if needed
+        }
+    }
+
     private fun isCacheValid(timestamp: Long): Boolean {
         val currentTime = System.currentTimeMillis()
         val cacheAge = currentTime - timestamp
